@@ -5,7 +5,7 @@ import { GoogleAuthProvider, signInWithPopup, getRedirectResult, onAuthStateChan
 import { Wallet, TrendingUp, PiggyBank, CreditCard, Zap, BarChart2, Tag, Home, PlusCircle, BarChart, Settings, Lightbulb, RefreshCw } from "lucide-react";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
-  deleteDoc, doc, updateDoc,
+  deleteDoc, doc, updateDoc, setDoc,
 } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
@@ -145,8 +145,7 @@ export default function HomePage() {
   const saveIncome = async (value: number) => {
     if (!user) return;
     const ref = doc(db, "incomes", user.uid);
-    await updateDoc(ref, { name: user.displayName || "Unknown", photo: user.photoURL || "", amount: value })
-      .catch(() => addDoc(collection(db, "incomes"), { name: user.displayName || "Unknown", photo: user.photoURL || "", amount: value }));
+    await setDoc(ref, { name: user.displayName || "Unknown", photo: user.photoURL || "", amount: value }, { merge: true });
   };
 
   // My income from the shared map
@@ -234,12 +233,21 @@ export default function HomePage() {
   // ── Computed ─────────────────────────────────────────────────────────────────
   const now = new Date();
 
+  // Helper: safely convert Firestore Timestamp or plain date to JS Date
+  const toDate = (val: any): Date | null => {
+    if (!val) return null;
+    if (typeof val.toDate === "function") return val.toDate();
+    if (val instanceof Date) return val;
+    if (val.seconds) return new Date(val.seconds * 1000);
+    return null;
+  };
+
   const thisMonthTx = transactions.filter((item) => {
-    const d = item.createdAt?.toDate?.();
+    const d = toDate(item.createdAt);
     return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
   const lastMonthTx = transactions.filter((item) => {
-    const d = item.createdAt?.toDate?.();
+    const d = toDate(item.createdAt);
     const lm = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
     const ly = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
     return d && d.getMonth() === lm && d.getFullYear() === ly;
@@ -252,7 +260,7 @@ export default function HomePage() {
 
   const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const weeklySpend = transactions
-    .filter((i) => { const d = i.createdAt?.toDate?.(); return d && d > sevenDaysAgo; })
+    .filter((i) => { const d = toDate(i.createdAt); return d && d > sevenDaysAgo; })
     .reduce((s, i) => s + Number(i.amount || 0), 0);
   const creditUsage = transactions
     .filter((i) => i.paymentMethod?.startsWith("Credit Card"))
@@ -265,7 +273,7 @@ export default function HomePage() {
   });
 
   const filteredTransactions = transactions.filter((item) => {
-    const d = item.createdAt?.toDate?.();
+    const d = toDate(item.createdAt);
     if (!d) return false;
     if (d.getMonth() !== filterMonth || d.getFullYear() !== filterYear) return false;
     if (filterCategory !== "All" && item.category !== filterCategory) return false;
@@ -286,7 +294,7 @@ export default function HomePage() {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
     const m = d.getMonth(); const y = d.getFullYear();
     const total = transactions
-      .filter((item) => { const td = item.createdAt?.toDate?.(); return td && td.getMonth() === m && td.getFullYear() === y; })
+      .filter((item) => { const td = toDate(item.createdAt); return td && td.getMonth() === m && td.getFullYear() === y; })
       .reduce((s, item) => s + Number(item.amount || 0), 0);
     return { month: MONTH_NAMES[m], total };
   });
@@ -304,7 +312,7 @@ export default function HomePage() {
 
   const uniqueNames = Array.from(new Set(transactions.map((i) => i.addedBy).filter(Boolean)));
   const availableYears = Array.from(
-    new Set(transactions.map((i) => i.createdAt?.toDate?.()?.getFullYear()).filter(Boolean))
+    new Set(transactions.map((i) => toDate(i.createdAt)?.getFullYear()).filter(Boolean))
   ).sort((a: any, b: any) => b - a) as number[];
   if (!availableYears.includes(now.getFullYear())) availableYears.unshift(now.getFullYear());
 
@@ -342,7 +350,7 @@ export default function HomePage() {
                 ? <img src={person.photo} className="w-5 h-5 rounded-full" alt="" />
                 : <div className="w-5 h-5 rounded-full bg-cyan-500 flex items-center justify-center text-xs font-bold">{person.name[0]}</div>
               }
-              <span className="text-xs text-zinc-300">{person.name.split(" ")[0]}</span>
+              <span className="text-xs text-zinc-300">{(person.name || "Unknown").split(" ")[0]}</span>
             </div>
           ))}
         </div>
@@ -387,12 +395,12 @@ export default function HomePage() {
                   <div className="flex items-center gap-2">
                     {data.photo
                       ? <img src={data.photo} className="w-7 h-7 rounded-full" alt="" />
-                      : <div className="w-7 h-7 rounded-full bg-cyan-700 flex items-center justify-center text-xs font-bold">{data.name[0]}</div>
+                      : <div className="w-7 h-7 rounded-full bg-cyan-700 flex items-center justify-center text-xs font-bold">{(data.name || "?")[0]}</div>
                     }
-                    <span className="text-sm font-medium">{data.name.split(" ")[0]}</span>
+                    <span className="text-sm font-medium">{(data.name || "Unknown").split(" ")[0]}</span>
                     {uid === user.uid && <span className="text-xs text-zinc-500">(you)</span>}
                   </div>
-                  <span className="text-sm font-bold text-emerald-400">₹{data.amount.toLocaleString()}</span>
+                  <span className="text-sm font-bold text-emerald-400">₹{(data.amount || 0).toLocaleString()}</span>
                 </div>
               ))}
               {Object.keys(incomeMap).length === 0 && (
@@ -474,9 +482,9 @@ export default function HomePage() {
                       <div className="flex items-center gap-2">
                         {person.photo
                           ? <img src={person.photo} className="w-7 h-7 rounded-full" alt="" />
-                          : <div className="w-7 h-7 rounded-full bg-cyan-500 flex items-center justify-center text-xs font-bold">{person.name[0]}</div>
+                          : <div className="w-7 h-7 rounded-full bg-cyan-500 flex items-center justify-center text-xs font-bold">{(person.name || "?")[0]}</div>
                         }
-                        <span className="font-medium text-sm">{person.name.split(" ")[0]}</span>
+                        <span className="font-medium text-sm">{(person.name || "Unknown").split(" ")[0]}</span>
                       </div>
                       <span className="font-bold text-sm">₹{person.total.toLocaleString()}</span>
                     </div>
