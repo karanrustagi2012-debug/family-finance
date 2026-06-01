@@ -1,8 +1,8 @@
 "use client";
 
 import { auth, db } from "@/lib/firebase";
-import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged } from "firebase/auth";
-import { Wallet, TrendingUp, PiggyBank, CreditCard, Zap, BarChart2, Tag, Home, PlusCircle, BarChart, Settings } from "lucide-react";
+import { GoogleAuthProvider, signInWithPopup, getRedirectResult, onAuthStateChanged } from "firebase/auth";
+import { Wallet, TrendingUp, PiggyBank, CreditCard, Zap, BarChart2, Tag, Home, PlusCircle, BarChart, Settings, Lightbulb, RefreshCw } from "lucide-react";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
   deleteDoc, doc, updateDoc,
@@ -14,6 +14,8 @@ import {
   BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 
+// ── Constants ────────────────────────────────────────────────────────────────
+
 const categories = [
   "Food & Dining", "Groceries", "Fuel", "Shopping", "Travel", "Rent",
   "Utilities", "Electricity", "Internet", "Mobile Recharge", "Entertainment",
@@ -24,6 +26,14 @@ const categories = [
 ];
 
 const paymentMethods = ["UPI", "Cash", "Credit Card", "Debit Card", "Bank Transfer"];
+
+// ── NEW: Credit card options ─────────────────────────────────────────────────
+const creditCards = [
+  "HDFC Regalia",
+  "HDFC Swiggy",
+  "Corporate HDFC",
+  "Amazon ICICI Card",
+];
 
 const PIE_COLORS = [
   "#06b6d4","#3b82f6","#8b5cf6","#ec4899","#f59e0b",
@@ -40,8 +50,34 @@ const DEFAULT_BUDGETS: Record<string, number> = {
   "Entertainment": 2000, "Medical": 3000, "Miscellaneous": 2000,
 };
 
-export default function HomePage() {
+// ── NEW: Financial tips ───────────────────────────────────────────────────────
+const FINANCIAL_TIPS = [
+  { tip: "Follow the 50/30/20 rule — 50% needs, 30% wants, 20% savings. It's the simplest budgeting framework that actually works.", icon: "💡" },
+  { tip: "Set up a SIP on the 1st of every month, right after salary credit. Automate savings before you can spend it.", icon: "📈" },
+  { tip: "An emergency fund of 6 months of expenses is your financial safety net. Start with ₹1,000 and build from there.", icon: "🛡️" },
+  { tip: "Credit card rewards are great — but only if you pay the full bill every month. Partial payments attract 36–42% annual interest.", icon: "💳" },
+  { tip: "Review your subscriptions every 3 months. Most households pay for 2–3 services they barely use.", icon: "🔄" },
+  { tip: "UPI spends feel invisible because no cash leaves your hand. Track them weekly — most people are surprised by the total.", icon: "📱" },
+  { tip: "Increase your SIP amount by 10% every year when you get a salary hike. This one habit can double your corpus over time.", icon: "🚀" },
+  { tip: "Term insurance should be 10–15x your annual income. It's the cheapest and most important financial protection you can buy.", icon: "❤️" },
+  { tip: "Avoid lifestyle inflation — when income goes up, don't let expenses rise at the same rate. Save the difference instead.", icon: "⚖️" },
+  { tip: "Gold as jewellery is not an investment. Consider Sovereign Gold Bonds instead — they pay 2.5% interest on top of gold returns.", icon: "🪙" },
+  { tip: "File your ITR even if your income is below the taxable limit. It builds a financial track record useful for loans and visas.", icon: "📋" },
+  { tip: "If you have a home loan, try to prepay even ₹5,000 extra every year. It can cut years off your loan tenure.", icon: "🏠" },
+  { tip: "Index funds beat most actively managed mutual funds over 10+ years, with much lower expense ratios. Consider Nifty 50 index funds.", icon: "📊" },
+  { tip: "Couples who discuss money weekly are statistically less likely to fight about it. Your GharKhata is a great starting point!", icon: "👫" },
+  { tip: "Before any big purchase, wait 72 hours. If you still want it after 3 days, it's probably not just an impulse buy.", icon: "⏳" },
+];
 
+// Pick a tip for today (changes daily, same for both users)
+const getTodaysTip = () => {
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+  return FINANCIAL_TIPS[dayOfYear % FINANCIAL_TIPS.length];
+};
+
+// ── Component ────────────────────────────────────────────────────────────────
+
+export default function HomePage() {
   const [user, setUser] = useState<any>(null);
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -49,14 +85,21 @@ export default function HomePage() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Food & Dining");
   const [paymentMethod, setPaymentMethod] = useState("UPI");
+  // NEW: credit card sub-selection & date
+  const [selectedCard, setSelectedCard] = useState(creditCards[0]);
+  const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const [monthlyIncome, setMonthlyIncome] = useState<number>(() => {
-  if (typeof window !== "undefined") {
-    return Number(localStorage.getItem("monthlyIncome") || 0);
-  }
-  return 0;
-});
+  // NEW: tip state (can be refreshed manually)
+  const [currentTip, setCurrentTip] = useState(getTodaysTip);
+  const [tipIndex, setTipIndex] = useState(() => {
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+    return dayOfYear % FINANCIAL_TIPS.length;
+  });
+
+  // NEW: both users' incomes stored in Firestore
+  const [incomeMap, setIncomeMap] = useState<Record<string, { name: string; photo: string; amount: number }>>({});
+
   const [budgets, setBudgets] = useState<Record<string, number>>(DEFAULT_BUDGETS);
   const [transactions, setTransactions] = useState<any[]>([]);
 
@@ -68,28 +111,15 @@ export default function HomePage() {
 
   const [activeTab, setActiveTab] = useState<"home" | "add" | "analytics" | "budgets">("home");
 
-  // ── Step 1: Check redirect result first, then set up auth listener ─────────
+  // ── Auth ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user) {
-          setUser(result.user);
-          toast.success("Logged in 🚀");
-        }
-      })
-      .catch((err) => {
-        console.error("Redirect error:", err);
-      })
-      .finally(() => {
-        // Step 2: Now set up the persistent auth listener
-        onAuthStateChanged(auth, (u) => {
-          setUser(u);
-          setAuthChecked(true);
-        });
-      });
+      .then((result) => { if (result?.user) { setUser(result.user); toast.success("Logged in 🚀"); } })
+      .catch(console.error)
+      .finally(() => { onAuthStateChanged(auth, (u) => { setUser(u); setAuthChecked(true); }); });
   }, []);
 
-  // ── Firestore ──────────────────────────────────────────────────────────────
+  // ── Firestore: transactions ─────────────────────────────────────────────────
   useEffect(() => {
     if (!user) { setTransactions([]); return; }
     const q = query(collection(db, "transactions"), orderBy("createdAt", "desc"));
@@ -101,45 +131,74 @@ export default function HomePage() {
     return () => unsub();
   }, [user]);
 
-  // ── Login ──────────────────────────────────────────────────────────────────
- const login = async () => {
-  try {
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: "select_account" });
-    const result = await signInWithPopup(auth, provider);
-    setUser(result.user);
-    toast.success("Logged in 🚀");
-  } catch (error: any) {
-    if (error.code === "auth/popup-blocked") {
-      toast.error("Please allow popups for this site and try again.");
-    } else {
-      toast.error("Login failed. Please try again.");
-    }
-  }
-};
+  // ── NEW: Firestore: incomes (shared between both users) ─────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(collection(db, "incomes"), (snap) => {
+      const map: Record<string, { name: string; photo: string; amount: number }> = {};
+      snap.forEach((d) => { map[d.id] = d.data() as any; });
+      setIncomeMap(map);
+    });
+    return () => unsub();
+  }, [user]);
 
-  // ── Add / Edit ─────────────────────────────────────────────────────────────
+  const saveIncome = async (value: number) => {
+    if (!user) return;
+    const ref = doc(db, "incomes", user.uid);
+    await updateDoc(ref, { name: user.displayName || "Unknown", photo: user.photoURL || "", amount: value })
+      .catch(() => addDoc(collection(db, "incomes"), { name: user.displayName || "Unknown", photo: user.photoURL || "", amount: value }));
+  };
+
+  // My income from the shared map
+  const myIncome = incomeMap[user?.uid]?.amount || 0;
+  const totalHouseholdIncome = Object.values(incomeMap).reduce((s, v) => s + v.amount, 0);
+
+  // ── Login ────────────────────────────────────────────────────────────────────
+  const login = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(auth, provider);
+      setUser(result.user);
+      toast.success("Logged in 🚀");
+    } catch (error: any) {
+      if (error.code === "auth/popup-blocked") toast.error("Please allow popups and try again.");
+      else toast.error("Login failed. Please try again.");
+    }
+  };
+
+  // ── Add / Edit ───────────────────────────────────────────────────────────────
   const addExpense = async () => {
     if (!user) { toast.error("Please log in first."); return; }
     if (!title.trim() || !amount) { toast.error("Fill in title and amount."); return; }
+    // Build label: if credit card, append card name
+    const paymentLabel = paymentMethod === "Credit Card" ? `Credit Card · ${selectedCard}` : paymentMethod;
     try {
       if (editingId) {
         await updateDoc(doc(db, "transactions", editingId), {
-          title, amount: Number(amount), category, paymentMethod,
+          title, amount: Number(amount), category,
+          paymentMethod: paymentLabel,
+          // NEW: save the chosen date
+          expenseDate,
         });
         setEditingId(null);
         toast.success("Updated ✅");
       } else {
         await addDoc(collection(db, "transactions"), {
-          title, amount: Number(amount), category, paymentMethod,
+          title, amount: Number(amount), category,
+          paymentMethod: paymentLabel,
           uid: user.uid,
           addedBy: user.displayName || "Unknown",
           addedByPhoto: user.photoURL || "",
           createdAt: new Date(),
+          // NEW: user-chosen date stored separately for display
+          expenseDate,
         });
         toast.success("Saved 🚀");
       }
-      setAmount(""); setTitle(""); setCategory("Food & Dining"); setPaymentMethod("UPI");
+      setAmount(""); setTitle(""); setCategory("Food & Dining");
+      setPaymentMethod("UPI"); setSelectedCard(creditCards[0]);
+      setExpenseDate(new Date().toISOString().split("T")[0]);
       setActiveTab("home");
     } catch { toast.error("Something went wrong."); }
   };
@@ -153,11 +212,26 @@ export default function HomePage() {
   const editTransaction = (item: any) => {
     if (item.uid !== user?.uid) { toast.error("You can only edit your own expenses."); return; }
     setTitle(item.title); setAmount(item.amount.toString());
-    setCategory(item.category); setPaymentMethod(item.paymentMethod);
+    setCategory(item.category);
+    // parse back credit card if present
+    if (item.paymentMethod?.startsWith("Credit Card ·")) {
+      setPaymentMethod("Credit Card");
+      setSelectedCard(item.paymentMethod.split("· ")[1] || creditCards[0]);
+    } else {
+      setPaymentMethod(item.paymentMethod || "UPI");
+    }
+    setExpenseDate(item.expenseDate || new Date().toISOString().split("T")[0]);
     setEditingId(item.id); setActiveTab("add");
   };
 
-  // ── Computed ───────────────────────────────────────────────────────────────
+  // ── Tip refresh ──────────────────────────────────────────────────────────────
+  const refreshTip = () => {
+    const next = (tipIndex + 1) % FINANCIAL_TIPS.length;
+    setTipIndex(next);
+    setCurrentTip(FINANCIAL_TIPS[next]);
+  };
+
+  // ── Computed ─────────────────────────────────────────────────────────────────
   const now = new Date();
 
   const thisMonthTx = transactions.filter((item) => {
@@ -174,22 +248,19 @@ export default function HomePage() {
   const totalSpend = thisMonthTx.reduce((s, i) => s + Number(i.amount || 0), 0);
   const lastMonthTotal = lastMonthTx.reduce((s, i) => s + Number(i.amount || 0), 0);
   const pctChange = lastMonthTotal ? (((totalSpend - lastMonthTotal) / lastMonthTotal) * 100).toFixed(1) : null;
-  const savings = monthlyIncome - totalSpend;
+  const savings = totalHouseholdIncome - totalSpend;
 
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const weeklySpend = transactions
     .filter((i) => { const d = i.createdAt?.toDate?.(); return d && d > sevenDaysAgo; })
     .reduce((s, i) => s + Number(i.amount || 0), 0);
   const creditUsage = transactions
-    .filter((i) => i.paymentMethod === "Credit Card")
+    .filter((i) => i.paymentMethod?.startsWith("Credit Card"))
     .reduce((s, i) => s + Number(i.amount || 0), 0);
 
   const spendByPerson: Record<string, { name: string; photo: string; total: number }> = {};
   thisMonthTx.forEach((item) => {
-    if (!spendByPerson[item.uid]) {
-      spendByPerson[item.uid] = { name: item.addedBy || "Unknown", photo: item.addedByPhoto || "", total: 0 };
-    }
+    if (!spendByPerson[item.uid]) spendByPerson[item.uid] = { name: item.addedBy || "Unknown", photo: item.addedByPhoto || "", total: 0 };
     spendByPerson[item.uid].total += Number(item.amount || 0);
   });
 
@@ -204,15 +275,11 @@ export default function HomePage() {
   });
 
   const categoryMap: Record<string, number> = {};
-  filteredTransactions.forEach((item) => {
-    categoryMap[item.category] = (categoryMap[item.category] || 0) + Number(item.amount || 0);
-  });
+  filteredTransactions.forEach((item) => { categoryMap[item.category] = (categoryMap[item.category] || 0) + Number(item.amount || 0); });
   const pieData = Object.entries(categoryMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 
   const paymentMap: Record<string, number> = {};
-  filteredTransactions.forEach((item) => {
-    paymentMap[item.paymentMethod] = (paymentMap[item.paymentMethod] || 0) + Number(item.amount || 0);
-  });
+  filteredTransactions.forEach((item) => { paymentMap[item.paymentMethod] = (paymentMap[item.paymentMethod] || 0) + Number(item.amount || 0); });
   const paymentPieData = Object.entries(paymentMap).map(([name, value]) => ({ name, value }));
 
   const monthlyComparison = Array.from({ length: 6 }, (_, i) => {
@@ -224,9 +291,7 @@ export default function HomePage() {
     return { month: MONTH_NAMES[m], total };
   });
 
-  const biggestExpense = thisMonthTx.reduce(
-    (max, item) => Number(item.amount) > Number(max?.amount || 0) ? item : max, null as any
-  );
+  const biggestExpense = thisMonthTx.reduce((max, item) => Number(item.amount) > Number(max?.amount || 0) ? item : max, null as any);
   const topCategory = pieData[0];
   const daysPassedThisMonth = now.getDate();
   const dailyAvg = daysPassedThisMonth > 0 ? Math.round(totalSpend / daysPassedThisMonth) : 0;
@@ -243,31 +308,26 @@ export default function HomePage() {
   ).sort((a: any, b: any) => b - a) as number[];
   if (!availableYears.includes(now.getFullYear())) availableYears.unshift(now.getFullYear());
 
-  // ── Loading screen ─────────────────────────────────────────────────────────
-  if (!authChecked) {
-    return (
-      <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center">
-        <div className="w-8 h-8 border-4 border-t-cyan-500 border-zinc-800 rounded-full animate-spin mb-4" />
-        <p className="text-zinc-400 text-sm">Loading...</p>
-      </main>
-    );
-  }
+  // ── Loading ──────────────────────────────────────────────────────────────────
+  if (!authChecked) return (
+    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center">
+      <div className="w-8 h-8 border-4 border-t-cyan-500 border-zinc-800 rounded-full animate-spin mb-4" />
+      <p className="text-zinc-400 text-sm">Loading...</p>
+    </main>
+  );
 
-  // ── Login screen ───────────────────────────────────────────────────────────
-  if (!user) {
-    return (
-      <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-8">
-        <h1 className="text-4xl font-bold mb-2">Family Finance OS</h1>
-        <p className="text-zinc-400 mb-10 text-center">Real-time expense tracker for your family</p>
-        <button onClick={login}
-          className="bg-white text-black px-8 py-4 rounded-2xl font-semibold text-lg hover:scale-105 transition">
-          Login with Google
-        </button>
-      </main>
-    );
-  }
+  // ── Login screen ─────────────────────────────────────────────────────────────
+  if (!user) return (
+    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-8">
+      <h1 className="text-4xl font-bold mb-2">Family Finance OS</h1>
+      <p className="text-zinc-400 mb-10 text-center">Real-time expense tracker for your family</p>
+      <button onClick={login} className="bg-white text-black px-8 py-4 rounded-2xl font-semibold text-lg hover:scale-105 transition">
+        Login with Google
+      </button>
+    </main>
+  );
 
-  // ── Main app ───────────────────────────────────────────────────────────────
+  // ── Main App ─────────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-black text-white pb-24">
       <Toaster position="top-center" />
@@ -291,31 +351,86 @@ export default function HomePage() {
       {/* ── HOME TAB ── */}
       {activeTab === "home" && (
         <div className="px-4 py-4 space-y-4">
-          {/* Income */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+
+          {/* ── NEW: Financial Tip of the Day ── */}
+          <div className="bg-gradient-to-br from-cyan-950 to-zinc-900 border border-cyan-800/40 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-zinc-400 text-sm">Monthly Income</p>
-              {monthlyIncome > 0 && (
+              <div className="flex items-center gap-2">
+                <Lightbulb className="text-cyan-400 w-4 h-4" />
+                <p className="text-cyan-400 text-xs font-semibold uppercase tracking-wider">Tip of the Day</p>
+              </div>
+              <button onClick={refreshTip} className="text-zinc-500 hover:text-cyan-400 transition" title="Next tip">
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <p className="text-sm text-zinc-200 leading-relaxed">
+              <span className="mr-1">{currentTip.icon}</span>{currentTip.tip}
+            </p>
+            <p className="text-zinc-600 text-xs mt-2">{tipIndex + 1} of {FINANCIAL_TIPS.length} tips</p>
+          </div>
+
+          {/* ── NEW: Both Incomes visible to everyone ── */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-zinc-400 text-sm font-medium">Household Income</p>
+              {totalHouseholdIncome > 0 && (
                 <span className={`text-sm font-semibold ${savings >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {savings >= 0 ? "✅" : "⚠️"} ₹{Math.abs(savings).toLocaleString()} {savings >= 0 ? "saved" : "over"}
+                  {savings >= 0 ? "✅" : "⚠️"} ₹{Math.abs(savings).toLocaleString()} {savings >= 0 ? "saved" : "over budget"}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-zinc-400">₹</span>
-              <input type="number" placeholder="Set income" value={monthlyIncome || ""}
-                onChange={(e) => {
-  const val = Number(e.target.value);
-  setMonthlyIncome(val);
-  localStorage.setItem("monthlyIncome", val.toString());
-}}
-                className="bg-zinc-800 p-2 rounded-xl outline-none flex-1 text-lg font-semibold" />
+
+            {/* Show all members' incomes */}
+            <div className="space-y-3 mb-3">
+              {Object.entries(incomeMap).map(([uid, data]) => (
+                <div key={uid} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {data.photo
+                      ? <img src={data.photo} className="w-7 h-7 rounded-full" alt="" />
+                      : <div className="w-7 h-7 rounded-full bg-cyan-700 flex items-center justify-center text-xs font-bold">{data.name[0]}</div>
+                    }
+                    <span className="text-sm font-medium">{data.name.split(" ")[0]}</span>
+                    {uid === user.uid && <span className="text-xs text-zinc-500">(you)</span>}
+                  </div>
+                  <span className="text-sm font-bold text-emerald-400">₹{data.amount.toLocaleString()}</span>
+                </div>
+              ))}
+              {Object.keys(incomeMap).length === 0 && (
+                <p className="text-zinc-500 text-xs">No income set yet. Add yours below.</p>
+              )}
             </div>
-            {monthlyIncome > 0 && (
+
+            {/* Total bar */}
+            {totalHouseholdIncome > 0 && (
+              <div className="bg-zinc-800 rounded-xl p-2 mb-3 flex justify-between items-center">
+                <span className="text-xs text-zinc-400">Combined total</span>
+                <span className="text-sm font-bold text-white">₹{totalHouseholdIncome.toLocaleString()}</span>
+              </div>
+            )}
+
+            {/* Edit my income */}
+            <div>
+              <p className="text-xs text-zinc-500 mb-1">Your monthly income</p>
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-400">₹</span>
+                <input
+                  type="number"
+                  placeholder="Set your income"
+                  value={myIncome || ""}
+                  onChange={(e) => saveIncome(Number(e.target.value))}
+                  className="bg-zinc-800 p-2 rounded-xl outline-none flex-1 text-lg font-semibold"
+                />
+              </div>
+            </div>
+
+            {/* Spend progress bar */}
+            {totalHouseholdIncome > 0 && (
               <div className="mt-3 h-2 bg-zinc-800 rounded-full overflow-hidden">
                 <div className={`h-full rounded-full transition-all ${
-                  (totalSpend/monthlyIncome) >= 1 ? "bg-red-500" : (totalSpend/monthlyIncome) >= 0.8 ? "bg-yellow-400" : "bg-emerald-400"
-                }`} style={{ width: `${Math.min((totalSpend/monthlyIncome)*100, 100)}%` }} />
+                  (totalSpend / totalHouseholdIncome) >= 1 ? "bg-red-500"
+                  : (totalSpend / totalHouseholdIncome) >= 0.8 ? "bg-yellow-400"
+                  : "bg-emerald-400"
+                }`} style={{ width: `${Math.min((totalSpend / totalHouseholdIncome) * 100, 100)}%` }} />
               </div>
             )}
           </div>
@@ -324,7 +439,7 @@ export default function HomePage() {
           <div className="grid grid-cols-2 gap-3">
             {[
               { label: "Monthly Spend", value: `₹${totalSpend.toLocaleString()}`, icon: Wallet,
-                sub: pctChange ? `${Number(pctChange)>0?"+":""}${pctChange}% vs last month` : "This month",
+                sub: pctChange ? `${Number(pctChange) > 0 ? "+" : ""}${pctChange}% vs last month` : "This month",
                 subColor: pctChange && Number(pctChange) > 0 ? "text-red-400" : "text-emerald-400" },
               { label: "Savings", value: `₹${Math.abs(savings).toLocaleString()}`, icon: PiggyBank,
                 sub: savings >= 0 ? "On track ✅" : "Overspent ⚠️",
@@ -367,8 +482,7 @@ export default function HomePage() {
                     </div>
                     {totalSpend > 0 && (
                       <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full bg-cyan-500 transition-all"
-                          style={{ width: `${(person.total / totalSpend) * 100}%` }} />
+                        <div className="h-full rounded-full bg-cyan-500 transition-all" style={{ width: `${(person.total / totalSpend) * 100}%` }} />
                       </div>
                     )}
                   </div>
@@ -399,8 +513,8 @@ export default function HomePage() {
                   <p className="text-zinc-400 text-xs">Daily avg</p>
                 </div>
                 <p className="text-lg font-bold">₹{dailyAvg.toLocaleString()}</p>
-                {monthlyIncome > 0 && (
-                  <p className="text-zinc-500 text-xs mt-1">Safe: ₹{Math.round(monthlyIncome/30).toLocaleString()}/day</p>
+                {totalHouseholdIncome > 0 && (
+                  <p className="text-zinc-500 text-xs mt-1">Safe: ₹{Math.round(totalHouseholdIncome / 30).toLocaleString()}/day</p>
                 )}
               </div>
               {topCategory && (
@@ -431,7 +545,7 @@ export default function HomePage() {
                     <div className="flex-shrink-0">
                       {item.addedByPhoto
                         ? <img src={item.addedByPhoto} className="w-8 h-8 rounded-full" alt="" />
-                        : <div className="w-8 h-8 rounded-full bg-cyan-700 flex items-center justify-center text-xs font-bold">{(item.addedBy||"?")[0]}</div>
+                        : <div className="w-8 h-8 rounded-full bg-cyan-700 flex items-center justify-center text-xs font-bold">{(item.addedBy || "?")[0]}</div>
                       }
                     </div>
                     <div className="flex-1 min-w-0">
@@ -442,7 +556,8 @@ export default function HomePage() {
                         </p>
                       </div>
                       <div className="flex items-center justify-between mt-0.5">
-                        <p className="text-zinc-500 text-xs">{item.category} · {item.paymentMethod}</p>
+                        {/* NEW: show expense date if available */}
+                        <p className="text-zinc-500 text-xs">{item.category} · {item.paymentMethod}{item.expenseDate ? ` · ${item.expenseDate}` : ""}</p>
                         <p className="text-zinc-600 text-xs ml-2 flex-shrink-0">{item.addedBy?.split(" ")[0]}</p>
                       </div>
                     </div>
@@ -464,31 +579,63 @@ export default function HomePage() {
       {activeTab === "add" && (
         <div className="px-4 py-6 space-y-4">
           <h2 className="text-2xl font-bold">{editingId ? "Edit Expense" : "Add Expense"}</h2>
+
           <input placeholder="What did you spend on?" value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl outline-none text-lg" />
+
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-lg font-semibold">₹</span>
             <input placeholder="0" type="number" value={amount}
               onChange={(e) => setAmount(e.target.value)}
               className="w-full bg-zinc-900 border border-zinc-800 p-4 pl-8 rounded-2xl outline-none text-2xl font-bold" />
           </div>
+
+          {/* ── NEW: Date picker ── */}
+          <div>
+            <label className="text-xs text-zinc-500 mb-1 block">Date of expense</label>
+            <input
+              type="date"
+              value={expenseDate}
+              onChange={(e) => setExpenseDate(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl outline-none text-base text-white"
+            />
+          </div>
+
           <select value={category} onChange={(e) => setCategory(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl outline-none text-base">
             {categories.map((c) => <option key={c}>{c}</option>)}
           </select>
+
+          {/* Payment method */}
           <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl outline-none text-base">
             {paymentMethods.map((p) => <option key={p}>{p}</option>)}
           </select>
+
+          {/* ── NEW: Credit card sub-dropdown (only shown if Credit Card selected) ── */}
+          {paymentMethod === "Credit Card" && (
+            <div>
+              <label className="text-xs text-zinc-500 mb-1 block">Select card</label>
+              <select
+                value={selectedCard}
+                onChange={(e) => setSelectedCard(e.target.value)}
+                className="w-full bg-zinc-800 border border-cyan-900 p-4 rounded-2xl outline-none text-base text-cyan-300 font-medium"
+              >
+                {creditCards.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+          )}
+
           <div className="grid grid-cols-4 gap-2">
             {[100, 200, 500, 1000].map((v) => (
-              <button key={v} onClick={() => setAmount((prev) => String(Number(prev||0) + v))}
+              <button key={v} onClick={() => setAmount((prev) => String(Number(prev || 0) + v))}
                 className="bg-zinc-800 py-3 rounded-2xl text-sm font-semibold hover:bg-zinc-700 transition">
                 +₹{v}
               </button>
             ))}
           </div>
+
           <button onClick={addExpense} className="w-full bg-cyan-500 py-4 rounded-2xl font-bold text-lg text-black">
             {editingId ? "Update Expense" : "Save Expense"}
           </button>
@@ -502,7 +649,6 @@ export default function HomePage() {
       {/* ── ANALYTICS TAB ── */}
       {activeTab === "analytics" && (
         <div className="px-4 py-4 space-y-4">
-          {/* Filters */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
             <p className="text-sm text-zinc-400 mb-3">Filters</p>
             <div className="grid grid-cols-2 gap-2">
@@ -531,11 +677,10 @@ export default function HomePage() {
               </select>
             </div>
             <div className="mt-3 text-cyan-400 text-sm font-semibold">
-              {filteredTransactions.length} transactions · ₹{filteredTransactions.reduce((s,i) => s+Number(i.amount||0),0).toLocaleString()}
+              {filteredTransactions.length} transactions · ₹{filteredTransactions.reduce((s, i) => s + Number(i.amount || 0), 0).toLocaleString()}
             </div>
           </div>
 
-          {/* Category Donut */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
             <p className="font-semibold mb-4">Spend by Category</p>
             {pieData.length === 0
@@ -565,7 +710,6 @@ export default function HomePage() {
             }
           </div>
 
-          {/* Payment Method Donut */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
             <p className="font-semibold mb-4">Spend by Payment Method</p>
             {paymentPieData.length === 0
@@ -595,14 +739,13 @@ export default function HomePage() {
             }
           </div>
 
-          {/* 6-month bar chart */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
             <p className="font-semibold mb-4">6-Month Comparison</p>
             <ResponsiveContainer width="100%" height={220}>
               <ReBarChart data={monthlyComparison} barSize={28}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                 <XAxis dataKey="month" stroke="#71717a" tick={{ fontSize: 12 }} />
-                <YAxis stroke="#71717a" tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} />
+                <YAxis stroke="#71717a" tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
                 <Tooltip formatter={(v: any) => `₹${Number(v).toLocaleString()}`}
                   contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 12 }} />
                 <Bar dataKey="total" fill="url(#barGrad)" radius={[6, 6, 0, 0]} />
@@ -616,7 +759,6 @@ export default function HomePage() {
             </ResponsiveContainer>
           </div>
 
-          {/* Filtered list */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
             <p className="font-semibold mb-4">{MONTH_NAMES[filterMonth]} {filterYear} Transactions</p>
             {filteredTransactions.length === 0
@@ -626,11 +768,11 @@ export default function HomePage() {
                     <div key={i} className="flex items-center gap-3">
                       {item.addedByPhoto
                         ? <img src={item.addedByPhoto} className="w-7 h-7 rounded-full flex-shrink-0" alt="" />
-                        : <div className="w-7 h-7 rounded-full bg-cyan-700 flex items-center justify-center text-xs font-bold flex-shrink-0">{(item.addedBy||"?")[0]}</div>
+                        : <div className="w-7 h-7 rounded-full bg-cyan-700 flex items-center justify-center text-xs font-bold flex-shrink-0">{(item.addedBy || "?")[0]}</div>
                       }
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{item.title}</p>
-                        <p className="text-zinc-500 text-xs">{item.category} · {item.addedBy?.split(" ")[0]}</p>
+                        <p className="text-zinc-500 text-xs">{item.category} · {item.addedBy?.split(" ")[0]}{item.expenseDate ? ` · ${item.expenseDate}` : ""}</p>
                       </div>
                       <p className="font-bold text-sm flex-shrink-0">₹{Number(item.amount).toLocaleString()}</p>
                     </div>
@@ -663,14 +805,13 @@ export default function HomePage() {
                 </div>
               </div>
               <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all duration-500 ${
-                  pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-yellow-400" : "bg-emerald-400"
-                }`} style={{ width: `${pct}%` }} />
+                <div className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-yellow-400" : "bg-emerald-400"}`}
+                  style={{ width: `${pct}%` }} />
               </div>
               <div className="flex justify-between mt-1">
                 <span className="text-zinc-600 text-xs">{pct.toFixed(0)}% used</span>
                 <span className="text-zinc-600 text-xs">
-                  {budget - spent >= 0 ? `₹${(budget-spent).toLocaleString()} left` : `₹${(spent-budget).toLocaleString()} over`}
+                  {budget - spent >= 0 ? `₹${(budget - spent).toLocaleString()} left` : `₹${(spent - budget).toLocaleString()} over`}
                 </span>
               </div>
             </div>
