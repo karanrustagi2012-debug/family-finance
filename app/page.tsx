@@ -113,6 +113,7 @@ export default function HomePage() {
   const [user, setUser] = useState<any>(null);
   const [authChecked, setAuthChecked] = useState(false);
 
+  // General Expense Form State
   const [amount, setAmount] = useState("");
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Food & Dining");
@@ -120,6 +121,13 @@ export default function HomePage() {
   const [selectedCard, setSelectedCard] = useState(creditCards[0]);
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // New Subscription Template Form State
+  const [subTitle, setSubTitle] = useState("");
+  const [subAmount, setSubAmount] = useState("");
+  const [subCategory, setSubCategory] = useState("Utilities");
+  const [subPaymentMethod, setSubPaymentMethod] = useState("UPI");
+  const [subSelectedCard, setSubSelectedCard] = useState(creditCards[0]);
 
   const [currentTip, setCurrentTip] = useState(getTodaysTip);
   const [tipIndex, setTipIndex] = useState(() => {
@@ -137,6 +145,10 @@ export default function HomePage() {
   
   // Real-time stream state for dynamic recurring subscriptions
   const [recurringBills, setRecurringBills] = useState<any[]>([]);
+  
+  // States for handling dynamic template updates inside the UI
+  const [editingBlueprintId, setEditingBlueprintId] = useState<string | null>(null);
+  const [blueprintAmountInput, setBlueprintAmountInput] = useState("");
 
   const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth());
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
@@ -144,7 +156,7 @@ export default function HomePage() {
   const [filterPayment, setFilterPayment] = useState<string>("All");
   const [filterWho, setFilterWho] = useState<string>("All");
 
-  const [activeTab, setActiveTab] = useState<"home" | "add" | "analytics" | "budgets">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "add" | "analytics" | "budgets" | "subscriptions">("home");
 
   // ── Auth ────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -272,6 +284,55 @@ export default function HomePage() {
     }
   };
 
+  // Add a recurring subscription blueprint template to Firestore
+  const addSubscriptionTemplate = async () => {
+    if (!subTitle.trim() || !subAmount) {
+      toast.error("Please fill out blueprint title and amount.");
+      return;
+    }
+    const paymentLabel = subPaymentMethod === "Credit Card" ? "Credit Card - " + subSelectedCard : subPaymentMethod;
+    try {
+      await addDoc(collection(db, "subscriptions"), {
+        title: subTitle.trim(),
+        amount: Number(subAmount),
+        category: subCategory,
+        paymentMethod: paymentLabel,
+      });
+      toast.success("New recurring blueprint saved! 🔄");
+      setSubTitle(""); setSubAmount("");
+    } catch {
+      toast.error("Failed to save blueprint template.");
+    }
+  };
+
+  // Delete blueprint template from Firestore
+  const deleteSubscriptionTemplate = async (id: string) => {
+    if (!window.confirm("Are you sure you want to completely delete this recurring subscription blueprint template?")) return;
+    try {
+      await deleteDoc(doc(db, "subscriptions", id));
+      toast.success("Template dropped.");
+    } catch {
+      toast.error("Could not remove template.");
+    }
+  };
+
+  // Update blueprint dynamic amount template in Firestore
+  const saveBlueprintAmount = async (id: string) => {
+    if (!blueprintAmountInput || isNaN(Number(blueprintAmountInput))) {
+      toast.error("Please enter a valid amount.");
+      return;
+    }
+    try {
+      await updateDoc(doc(db, "subscriptions", id), {
+        amount: Number(blueprintAmountInput),
+      });
+      setEditingBlueprintId(null);
+      toast.success("Template bill amount updated! 📝");
+    } catch {
+      toast.error("Failed to update template.");
+    }
+  };
+
   const deleteTransaction = async (id: string, ownerUid: string) => {
     if (ownerUid !== user?.uid) { toast.error("You can only delete your own expenses."); return; }
     
@@ -357,9 +418,13 @@ export default function HomePage() {
   const pctChange = lastMonthTotal ? (((totalSpend - lastMonthTotal) / lastMonthTotal) * 100).toFixed(1) : null;
   const savings = totalHouseholdIncome - totalSpend;
 
-  // Derive which dynamic bills haven't been matched to this month's transactions yet
+  // Upgraded flexible partial-matching logic so user-logged actions also clear the queue
   const pendingBills = recurringBills.filter((blueprint) => {
-    return !thisMonthTx.some((tx) => tx.title.toLowerCase() === blueprint.title.toLowerCase());
+    return !thisMonthTx.some((tx) => {
+      const txTitle = tx.title.toLowerCase();
+      const bpTitle = blueprint.title.toLowerCase();
+      return txTitle.includes(bpTitle) || bpTitle.includes(txTitle);
+    });
   });
 
   const sevenDaysAgo = new Date(); 
@@ -485,7 +550,7 @@ export default function HomePage() {
             <p className="text-zinc-600 text-xs mt-2">{tipIndex + 1} of {FINANCIAL_TIPS.length} tips</p>
           </div>
 
-          {/* One-Tap Recurring Bill Queue */}
+          {/* One-Tap Recurring Bill Queue with Edit Mode Handling */}
           {pendingBills.length > 0 && (
             <div className="bg-gradient-to-r from-zinc-900 to-zinc-950 border border-zinc-800 rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-3">
@@ -493,20 +558,56 @@ export default function HomePage() {
                 <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">One-Tap Bill Approvals</p>
               </div>
               <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
-                {pendingBills.map((bill, index) => (
-                  <div key={bill.id || index} className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3 min-w-[200px] flex flex-col justify-between space-y-2">
-                    <div>
-                      <p className="text-xs text-zinc-400 font-medium truncate">{bill.title}</p>
-                      <p className="text-base font-bold text-white">₹{Number(bill.amount).toLocaleString()}</p>
+                {pendingBills.map((bill, index) => {
+                  const isEditingThis = editingBlueprintId === bill.id;
+                  return (
+                    <div key={bill.id || index} className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3 min-w-[200px] flex flex-col justify-between space-y-2">
+                      <div>
+                        <p className="text-xs text-zinc-400 font-medium truncate">{bill.title}</p>
+                        
+                        {isEditingThis ? (
+                          <div className="flex items-center gap-1 mt-1">
+                            <span className="text-sm text-zinc-400">₹</span>
+                            <input
+                              type="number"
+                              value={blueprintAmountInput}
+                              onChange={(e) => setBlueprintAmountInput(e.target.value)}
+                              className="bg-zinc-900 text-white font-bold text-sm p-1 rounded border border-zinc-700 w-24 outline-none"
+                              autoFocus
+                            />
+                            <button 
+                              onClick={() => saveBlueprintAmount(bill.id)}
+                              className="text-xs bg-emerald-500 text-black px-1.5 py-1 rounded font-bold"
+                            >
+                              ✓
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between mt-1 group">
+                            <p className="text-base font-bold text-white">₹{Number(bill.amount).toLocaleString()}</p>
+                            <button 
+                              onClick={() => {
+                                setEditingBlueprintId(bill.id);
+                                setBlueprintAmountInput(bill.amount.toString());
+                              }}
+                              className="text-xs text-zinc-500 hover:text-cyan-400 transition px-1"
+                              title="Edit blueprint amount"
+                            >
+                              ✏️
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <button 
+                        onClick={() => logRecurringBill(bill)}
+                        className="text-xs bg-cyan-500 text-black font-semibold py-1 px-2.5 rounded-lg hover:bg-cyan-400 transition-colors w-full text-center"
+                        disabled={isEditingThis}
+                      >
+                        Approve & Log
+                      </button>
                     </div>
-                    <button 
-                      onClick={() => logRecurringBill(bill)}
-                      className="text-xs bg-cyan-500 text-black font-semibold py-1 px-2.5 rounded-lg hover:bg-cyan-400 transition-colors w-full text-center"
-                    >
-                      Approve & Log
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -927,9 +1028,9 @@ export default function HomePage() {
                         ))}
                       </Pie>
                       <Tooltip
-  formatter={(value: any) => "₹" + Number(value).toLocaleString()}
-  contentStyle={{ backgroundColor: "#18181b", border: "none", borderRadius: "8px", color: "#fff" }}
-  itemStyle={{ color: "#fff" }}
+                        formatter={(value: any) => "₹" + Number(value).toLocaleString()}
+                        contentStyle={{ backgroundColor: "#18181b", border: "none", borderRadius: "8px", color: "#fff" }}
+                        itemStyle={{ color: "#fff" }}
                       />
                     </PieChart>
                   </ResponsiveContainer>
@@ -970,10 +1071,10 @@ export default function HomePage() {
                     tickFormatter={(val) => "₹" + (val / 1000) + "k"}
                   />
                   <Tooltip
-  cursor={{ fill: "#27272a" }}
-  formatter={(value: any) => "₹" + Number(value).toLocaleString()}
-  contentStyle={{ backgroundColor: "#18181b", border: "none", borderRadius: "8px", color: "#fff" }}
-/>
+                    cursor={{ fill: "#27272a" }}
+                    formatter={(value: any) => "₹" + Number(value).toLocaleString()}
+                    contentStyle={{ backgroundColor: "#18181b", border: "none", borderRadius: "8px", color: "#fff" }}
+                  />
                   <Bar dataKey="total" fill="#06b6d4" radius={[4, 4, 0, 0]} />
                 </ReBarChart>
               </ResponsiveContainer>
@@ -1021,6 +1122,115 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* ── SUBSCRIPTIONS TEMPLATE MANAGER TAB ── */}
+      {activeTab === "subscriptions" && (
+        <div className="px-4 py-6 space-y-6">
+          <div>
+            <h2 className="text-2xl font-bold">Subscription Blueprints</h2>
+            <p className="text-xs text-zinc-500 mt-1">Configure master templates for recurring monthly bills.</p>
+          </div>
+
+          {/* Form to Add New Blueprint */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
+            <p className="text-sm font-semibold text-zinc-300">Create New Blueprint</p>
+            
+            <input 
+              placeholder="e.g., Netflix, Electricity, Rent" 
+              value={subTitle}
+              onChange={(e) => setSubTitle(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-xl outline-none text-sm text-white" 
+            />
+
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-semibold">₹</span>
+              <input 
+                placeholder="Expected Amount" 
+                type="number" 
+                value={subAmount}
+                onChange={(e) => setSubAmount(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 p-3 pl-7 rounded-xl outline-none text-sm text-white font-semibold" 
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-1">Category</label>
+                <select 
+                  value={subCategory} 
+                  onChange={(e) => setSubCategory(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-xl outline-none text-xs text-white"
+                >
+                  {categories.map((c) => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-1">Payment Channel</label>
+                <select 
+                  value={subPaymentMethod} 
+                  onChange={(e) => setSubPaymentMethod(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-xl outline-none text-xs text-white"
+                >
+                  {paymentMethods.map((m) => <option key={m}>{m}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {subPaymentMethod === "Credit Card" && (
+              <div className="pt-1">
+                <label className="text-[10px] text-zinc-500 block mb-1">Select Linked Credit Card</label>
+                <select
+                  value={subSelectedCard}
+                  onChange={(e) => setSubSelectedCard(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-xl outline-none text-xs text-white"
+                >
+                  {creditCards.map((card) => <option key={card}>{card}</option>)}
+                </select>
+              </div>
+            )}
+
+            <button
+              onClick={addSubscriptionTemplate}
+              className="w-full bg-cyan-500 text-black text-sm font-bold p-3 rounded-xl mt-2 hover:bg-cyan-400 transition"
+            >
+              Save Template Blueprint
+            </button>
+          </div>
+
+          {/* Active Blueprints Inventory Listing */}
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-zinc-400">Current Templates ({recurringBills.length})</p>
+            
+            {recurringBills.length === 0 ? (
+              <p className="text-zinc-600 text-xs text-center py-6">No subscription templates set up yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {recurringBills.map((bill) => (
+                  <div key={bill.id} className="bg-zinc-900 border border-zinc-800/60 p-3 rounded-xl flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-white">{bill.title}</p>
+                      <p className="text-zinc-500 text-[11px] mt-0.5">
+                        {bill.category} • {bill.paymentMethod}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-cyan-400">₹{Number(bill.amount).toLocaleString()}</span>
+                      <button 
+                        onClick={() => deleteSubscriptionTemplate(bill.id)}
+                        className="text-xs bg-red-950/40 text-red-400 hover:bg-red-900 hover:text-white p-2 rounded-lg transition"
+                        title="Remove blueprint"
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── BOTTOM NAVIGATION ── */}
       <div className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-md border-t border-zinc-800 flex items-center justify-around p-4 pb-safe z-50">
         <button
@@ -1063,9 +1273,16 @@ export default function HomePage() {
           <Wallet className="w-6 h-6" />
           <span className="text-[10px] font-medium">Budgets</span>
         </button>
-        <button className="flex flex-col items-center gap-1 text-zinc-500 hover:text-zinc-300 transition-colors">
-          <Settings className="w-6 h-6" />
-          <span className="text-[10px] font-medium">Settings</span>
+        
+        {/* Swapped dead settings tab with the dynamic subscriptions portal */}
+        <button
+          onClick={() => setActiveTab("subscriptions")}
+          className={`flex flex-col items-center gap-1 transition-colors ${
+            activeTab === "subscriptions" ? "text-cyan-400" : "text-zinc-500 hover:text-zinc-300"
+          }`}
+        >
+          <RefreshCw className="w-6 h-6" />
+          <span className="text-[10px] font-medium">Subscriptions</span>
         </button>
       </div>
     </main>
