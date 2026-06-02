@@ -2,7 +2,7 @@
 
 import { auth, db } from "@/lib/firebase";
 import { GoogleAuthProvider, signInWithPopup, getRedirectResult, onAuthStateChanged } from "firebase/auth";
-import { Wallet, TrendingUp, PiggyBank, CreditCard, Zap, BarChart2, Tag, Home, PlusCircle, BarChart, Settings, Lightbulb, RefreshCw } from "lucide-react";
+import { Wallet, TrendingUp, PiggyBank, CreditCard, Zap, BarChart2, Tag, Home, PlusCircle, BarChart, Settings, Lightbulb, RefreshCw, Download, CheckCircle2, Scale } from "lucide-react";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
   deleteDoc, doc, updateDoc, setDoc,
@@ -27,7 +27,6 @@ const categories = [
 
 const paymentMethods = ["UPI", "Cash", "Credit Card", "Debit Card", "Bank Transfer"];
 
-// ── NEW: Credit card options ─────────────────────────────────────────────────
 const creditCards = [
   "HDFC Regalia",
   "HDFC Swiggy",
@@ -50,7 +49,6 @@ const DEFAULT_BUDGETS: Record<string, number> = {
   "Entertainment": 2000, "Medical": 3000, "Miscellaneous": 2000,
 };
 
-// ── NEW: Financial tips ───────────────────────────────────────────────────────
 const FINANCIAL_TIPS = [
   { tip: "Follow the 50/30/20 rule — 50% needs, 30% wants, 20% savings. It's the simplest budgeting framework that actually works.", icon: "💡" },
   { tip: "Set up a SIP on the 1st of every month, right after salary credit. Automate savings before you can spend it.", icon: "📈" },
@@ -67,9 +65,43 @@ const FINANCIAL_TIPS = [
   { tip: "Index funds beat most actively managed mutual funds over 10+ years, with much lower expense ratios. Consider Nifty 50 index funds.", icon: "📊" },
   { tip: "Couples who discuss money weekly are statistically less likely to fight about it. Your GharKhata is a great starting point!", icon: "👫" },
   { tip: "Before any big purchase, wait 72 hours. If you still want it after 3 days, it's probably not just an impulse buy.", icon: "⏳" },
+  { tip: "Never combine insurance and investment. Avoid traditional money-back policies; keep term insurance and mutual funds separate.", icon: "❌" },
+  { tip: "Check your free credit score (CIBIL) quarterly. Look out for any wrong accounts or errors that could hurt your loan eligibility.", icon: "🔍" },
+  { tip: "When booking flights, clear your browser cookies or use incognito mode. Dynamic pricing can artificially bump up airfares.", icon: "✈️" },
+  { tip: "Buy grocery staples in bulk once a month. Items like rice, oil, and lentils are significantly cheaper when bought in larger quantities.", icon: "🌾" },
+  { tip: "Track your net worth once every six months. Seeing your total assets minus liabilities grow over time is incredibly motivating.", icon: "🏆" },
+  { tip: "Keep your emergency fund in a separate bank account or a liquid mutual fund so you aren't tempted to swipe it for routine expenses.", icon: "🏦" },
+  { tip: "Health insurance is non-negotiable. Don't rely solely on corporate insurance; get a personal family floater policy early in life.", icon: "🏥" },
+  { tip: "Automate your utility bill payments (electricity, internet, postpaid). Missing due dates costs money in late fees and drops credit scores.", icon: "🔌" },
+  { tip: "Before availing a 'No Cost EMI', check if there's a processing fee or if a cash discount is being discarded behind the scenes.", icon: "🏷️" },
+  { tip: "Rent items you'll only use once or twice (like heavy travel gear or event outfits) instead of buying them outright.", icon: "👔" },
+  { tip: "If you have high-interest debts like personal loans or credit card dues, pay them off aggressively before focusing heavily on investments.", icon: "📉" },
+  { tip: "When dining out, check for payment app discounts or dining memberships before the bill arrives. You can easily save 10-25%.", icon: "🍽️" },
+  { tip: "Keep separate credit cards for different purposes—one for fixed bills and another for shopping to easily track your spending ceilings.", icon: "🃏" },
+  { tip: "When you get an annual bonus, use the 30/70 rule: spend 30% on treating yourself and assign 70% toward long-term goals or debt.", icon: "🎁" },
+  { tip: "Review your bank statements line-by-line twice a year. You'll often find forgotten app renewals, SMS charges, or old mandates.", icon: "📝" },
+  { tip: "Invest in upgrading your professional skills. Your primary source of income is your greatest wealth generator early on.", icon: "🧠" },
+  { tip: "Do not invest in complex derivative products like Options or Futures unless you are an absolute financial professional.", icon: "⚠️" },
+  { tip: "Keep an digital or physical folder for all your financial documents—wills, insurance policies, and passwords. Inform your partner.", icon: "📂" },
+  { tip: "When buying an automobile, factor in insurance renewals, periodic maintenance, and fuel costs—not just the monthly loan EMI.", icon: "🚗" },
+  { tip: "Maintain a strict 'fun budget' line item. Complete restriction leads to burnout; allow yourself guilt-free spending money.", icon: "🍿" },
+  { tip: "Compare insurance quotes online across portals before renewing your car or health insurance. Agents often bake in extra margins.", icon: "💻" },
+  { tip: "Avoid buying financial products pitched directly by relatives or neighborhood uncles out of sheer obligation. Evaluate independently.", icon: "🛑" },
+  { tip: "If you're investing for a goal less than 3 years away (like a trip or deposit), stick to low-risk instruments like FD or Arbitrage funds.", icon: "⏱️" },
+  { tip: "Diversify your investments. Having all money in equity, or all in real estate, leaves you highly exposed to market cycles.", icon: "🧩" },
+  { tip: "Understand the difference between direct and regular mutual funds. Direct funds save you commission costs, compounding your returns.", icon: "🎯" },
+  { tip: "Calculate your hourly wage rate (Income divided by work hours). Before buying a ₹5,000 item, ask if it's worth 10 hours of labor.", icon: "⏱️" },
+  { tip: "Don't pause your SIPs during a stock market crash. Market corrections are exactly when your money buys more mutual fund units.", icon: "📉" },
+  { tip: "Shop for non-perishable household goods online during subscription delivery windows or sale days to claim cashbacks.", icon: "📦" },
+  { tip: "Ensure you assign nominees to all your bank accounts, demat accounts, and mutual fund portfolios. It takes minutes but saves years of hassle.", icon: "✍️" },
+  { tip: "Teach your family members how to manage money and use tracking platforms. Financial transparency ensures unity.", icon: "🏫" },
+  { tip: "Be wary of lifestyle creep when moving houses. A bigger house usually means higher electricity bills, maintenance, and furniture expenses.", icon: "🛋️" },
+  { tip: "Check if your credit card offers free airport lounge access or movie ticket buy-one-get-one deals before paying out of pocket.", icon: "🎟️" },
+  { tip: "The best time to start investing was yesterday; the second best time is today. Compounding requires time, not massive principal.", icon: "⏳" },
+  { tip: "Avoid retail therapy. If you are feeling stressed or down, step away from shopping apps and go for a walk instead.", icon: "🚶" },
+  { tip: "Celebrate milestones! Building financial discipline is hard work. When you cross a savings or debt goal, reward yourself reasonably.", icon: "🎉" },
 ];
 
-// Pick a tip for today (changes daily, same for both users)
 const getTodaysTip = () => {
   const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
   return FINANCIAL_TIPS[dayOfYear % FINANCIAL_TIPS.length];
@@ -85,23 +117,26 @@ export default function HomePage() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Food & Dining");
   const [paymentMethod, setPaymentMethod] = useState("UPI");
-  // NEW: credit card sub-selection & date
   const [selectedCard, setSelectedCard] = useState(creditCards[0]);
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // NEW: tip state (can be refreshed manually)
   const [currentTip, setCurrentTip] = useState(getTodaysTip);
   const [tipIndex, setTipIndex] = useState(() => {
     const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
     return dayOfYear % FINANCIAL_TIPS.length;
   });
 
-  // NEW: both users' incomes stored in Firestore
+  // Global income state map from Firestore
   const [incomeMap, setIncomeMap] = useState<Record<string, { name: string; photo: string; amount: number }>>({});
+  // Local state for user income input buffer
+  const [localIncome, setLocalIncome] = useState("");
 
   const [budgets, setBudgets] = useState<Record<string, number>>(DEFAULT_BUDGETS);
   const [transactions, setTransactions] = useState<any[]>([]);
+  
+  // Real-time stream state for dynamic recurring subscriptions
+  const [recurringBills, setRecurringBills] = useState<any[]>([]);
 
   const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth());
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
@@ -122,7 +157,7 @@ export default function HomePage() {
   // ── Firestore: transactions ─────────────────────────────────────────────────
   useEffect(() => {
     if (!user) { setTransactions([]); return; }
-    const q = query(collection(db, "transactions"), orderBy("createdAt", "desc"));
+    const q = query(collection(db, "transactions"), orderBy("expenseDate", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       const items: any[] = [];
       snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
@@ -131,7 +166,7 @@ export default function HomePage() {
     return () => unsub();
   }, [user]);
 
-  // ── NEW: Firestore: incomes (shared between both users) ─────────────────────
+  // ── Firestore: incomes ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(collection(db, "incomes"), (snap) => {
@@ -142,14 +177,30 @@ export default function HomePage() {
     return () => unsub();
   }, [user]);
 
+  // ── Firestore: dynamic subscriptions ────────────────────────────────────────
+  useEffect(() => {
+    if (!user) { setRecurringBills([]); return; }
+    const unsub = onSnapshot(collection(db, "subscriptions"), (snap) => {
+      const items: any[] = [];
+      snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+      setRecurringBills(items);
+    });
+    return () => unsub();
+  }, [user]);
+
+  // Sync global income changes down to local form field
+  useEffect(() => {
+    if (user && incomeMap[user.uid]) {
+      setLocalIncome(incomeMap[user.uid].amount.toString());
+    }
+  }, [incomeMap, user]);
+
   const saveIncome = async (value: number) => {
     if (!user) return;
     const ref = doc(db, "incomes", user.uid);
     await setDoc(ref, { name: user.displayName || "Unknown", photo: user.photoURL || "", amount: value }, { merge: true });
   };
 
-  // My income from the shared map
-  const myIncome = incomeMap[user?.uid]?.amount || 0;
   const totalHouseholdIncome = Object.values(incomeMap).reduce((s, v) => s + v.amount, 0);
 
   // ── Login ────────────────────────────────────────────────────────────────────
@@ -170,14 +221,13 @@ export default function HomePage() {
   const addExpense = async () => {
     if (!user) { toast.error("Please log in first."); return; }
     if (!title.trim() || !amount) { toast.error("Fill in title and amount."); return; }
-    // Build label: if credit card, append card name
-    const paymentLabel = paymentMethod === "Credit Card" ? `Credit Card · ${selectedCard}` : paymentMethod;
+    
+    const paymentLabel = paymentMethod === "Credit Card" ? "Credit Card - " + selectedCard : paymentMethod;
     try {
       if (editingId) {
         await updateDoc(doc(db, "transactions", editingId), {
           title, amount: Number(amount), category,
           paymentMethod: paymentLabel,
-          // NEW: save the chosen date
           expenseDate,
         });
         setEditingId(null);
@@ -190,7 +240,6 @@ export default function HomePage() {
           addedBy: user.displayName || "Unknown",
           addedByPhoto: user.photoURL || "",
           createdAt: new Date(),
-          // NEW: user-chosen date stored separately for display
           expenseDate,
         });
         toast.success("Saved 🚀");
@@ -202,20 +251,48 @@ export default function HomePage() {
     } catch { toast.error("Something went wrong."); }
   };
 
+  // One tap recurring activation mechanism
+  const logRecurringBill = async (bill: any) => {
+    if (!user) return;
+    try {
+      await addDoc(collection(db, "transactions"), {
+        title: bill.title,
+        amount: Number(bill.amount),
+        category: bill.category,
+        paymentMethod: bill.paymentMethod,
+        uid: user.uid,
+        addedBy: user.displayName || "Unknown",
+        addedByPhoto: user.photoURL || "",
+        createdAt: new Date(),
+        expenseDate: new Date().toISOString().split("T")[0],
+      });
+      toast.success(`Logged ${bill.title} 🧾`);
+    } catch {
+      toast.error("Failed to quick-log bill.");
+    }
+  };
+
   const deleteTransaction = async (id: string, ownerUid: string) => {
     if (ownerUid !== user?.uid) { toast.error("You can only delete your own expenses."); return; }
-    try { await deleteDoc(doc(db, "transactions", id)); toast.success("Deleted."); }
-    catch { toast.error("Could not delete."); }
+    
+    const isConfirmed = window.confirm("Are you sure you want to delete this expense entry?");
+    if (!isConfirmed) return;
+
+    try { 
+      await deleteDoc(doc(db, "transactions", id)); 
+      toast.success("Deleted."); 
+    } catch { 
+      toast.error("Could not delete."); 
+    }
   };
 
   const editTransaction = (item: any) => {
     if (item.uid !== user?.uid) { toast.error("You can only edit your own expenses."); return; }
     setTitle(item.title); setAmount(item.amount.toString());
     setCategory(item.category);
-    // parse back credit card if present
-    if (item.paymentMethod?.startsWith("Credit Card ·")) {
+    if (item.paymentMethod && item.paymentMethod.indexOf("Credit Card -") === 0) {
       setPaymentMethod("Credit Card");
-      setSelectedCard(item.paymentMethod.split("· ")[1] || creditCards[0]);
+      setSelectedCard(item.paymentMethod.split("- ")[1] || creditCards[0]);
     } else {
       setPaymentMethod(item.paymentMethod || "UPI");
     }
@@ -223,34 +300,56 @@ export default function HomePage() {
     setEditingId(item.id); setActiveTab("add");
   };
 
-  // ── Tip refresh ──────────────────────────────────────────────────────────────
   const refreshTip = () => {
     const next = (tipIndex + 1) % FINANCIAL_TIPS.length;
     setTipIndex(next);
     setCurrentTip(FINANCIAL_TIPS[next]);
   };
 
-  // ── Computed ─────────────────────────────────────────────────────────────────
-  const now = new Date();
+  // ── CSV Data Export Feature ──
+  const exportToCSV = () => {
+    if (filteredTransactions.length === 0) {
+      toast.error("No transactions to export for current filter view.");
+      return;
+    }
+    const headers = ["Date", "Description", "Amount (INR)", "Category", "Payment Method", "Logged By"];
+    const rows = filteredTransactions.map((t) => [
+      t.expenseDate || "",
+      `"${t.title.replace(/"/g, '""')}"`,
+      t.amount,
+      t.category,
+      t.paymentMethod || "",
+      t.addedBy || "Unknown",
+    ]);
 
-  // Helper: safely convert Firestore Timestamp or plain date to JS Date
-  const toDate = (val: any): Date | null => {
-    if (!val) return null;
-    if (typeof val.toDate === "function") return val.toDate();
-    if (val instanceof Date) return val;
-    if (val.seconds) return new Date(val.seconds * 1000);
-    return null;
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `GharKhata_Report_${MONTH_NAMES[filterMonth]}_${filterYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Spreadsheet generated successfully! 📊");
   };
 
+  // ── Computed States Evaluated Against expenseDate ──
+  const now = new Date();
+
   const thisMonthTx = transactions.filter((item) => {
-    const d = toDate(item.createdAt);
-    return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    if (!item.expenseDate) return false;
+    const [y, m] = item.expenseDate.split("-").map(Number);
+    return (m - 1) === now.getMonth() && y === now.getFullYear();
   });
+
   const lastMonthTx = transactions.filter((item) => {
-    const d = toDate(item.createdAt);
+    if (!item.expenseDate) return false;
+    const [y, m] = item.expenseDate.split("-").map(Number);
     const lm = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
     const ly = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-    return d && d.getMonth() === lm && d.getFullYear() === ly;
+    return (m - 1) === lm && y === ly;
   });
 
   const totalSpend = thisMonthTx.reduce((s, i) => s + Number(i.amount || 0), 0);
@@ -258,12 +357,22 @@ export default function HomePage() {
   const pctChange = lastMonthTotal ? (((totalSpend - lastMonthTotal) / lastMonthTotal) * 100).toFixed(1) : null;
   const savings = totalHouseholdIncome - totalSpend;
 
-  const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  // Derive which dynamic bills haven't been matched to this month's transactions yet
+  const pendingBills = recurringBills.filter((blueprint) => {
+    return !thisMonthTx.some((tx) => tx.title.toLowerCase() === blueprint.title.toLowerCase());
+  });
+
+  const sevenDaysAgo = new Date(); 
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const weeklySpend = transactions
-    .filter((i) => { const d = toDate(i.createdAt); return d && d > sevenDaysAgo; })
+    .filter((i) => {
+      if (!i.expenseDate) return false;
+      return new Date(i.expenseDate) >= sevenDaysAgo;
+    })
     .reduce((s, i) => s + Number(i.amount || 0), 0);
+
   const creditUsage = transactions
-    .filter((i) => i.paymentMethod?.startsWith("Credit Card"))
+    .filter((i) => i.paymentMethod && i.paymentMethod.indexOf("Credit Card") === 0)
     .reduce((s, i) => s + Number(i.amount || 0), 0);
 
   const spendByPerson: Record<string, { name: string; photo: string; total: number }> = {};
@@ -273,9 +382,9 @@ export default function HomePage() {
   });
 
   const filteredTransactions = transactions.filter((item) => {
-    const d = toDate(item.createdAt);
-    if (!d) return false;
-    if (d.getMonth() !== filterMonth || d.getFullYear() !== filterYear) return false;
+    if (!item.expenseDate) return false;
+    const [y, m] = item.expenseDate.split("-").map(Number);
+    if ((m - 1) !== filterMonth || y !== filterYear) return false;
     if (filterCategory !== "All" && item.category !== filterCategory) return false;
     if (filterPayment !== "All" && item.paymentMethod !== filterPayment) return false;
     if (filterWho !== "All" && item.addedBy !== filterWho) return false;
@@ -286,15 +395,15 @@ export default function HomePage() {
   filteredTransactions.forEach((item) => { categoryMap[item.category] = (categoryMap[item.category] || 0) + Number(item.amount || 0); });
   const pieData = Object.entries(categoryMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 
-  const paymentMap: Record<string, number> = {};
-  filteredTransactions.forEach((item) => { paymentMap[item.paymentMethod] = (paymentMap[item.paymentMethod] || 0) + Number(item.amount || 0); });
-  const paymentPieData = Object.entries(paymentMap).map(([name, value]) => ({ name, value }));
-
   const monthlyComparison = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
     const m = d.getMonth(); const y = d.getFullYear();
     const total = transactions
-      .filter((item) => { const td = toDate(item.createdAt); return td && td.getMonth() === m && td.getFullYear() === y; })
+      .filter((item) => {
+        if (!item.expenseDate) return false;
+        const [itemY, itemM] = item.expenseDate.split("-").map(Number);
+        return (itemM - 1) === m && itemY === y;
+      })
       .reduce((s, item) => s + Number(item.amount || 0), 0);
     return { month: MONTH_NAMES[m], total };
   });
@@ -311,12 +420,13 @@ export default function HomePage() {
   });
 
   const uniqueNames = Array.from(new Set(transactions.map((i) => i.addedBy).filter(Boolean)));
+  const uniquePayments = Array.from(new Set(transactions.map((i) => i.paymentMethod).filter(Boolean)));
+  
   const availableYears = Array.from(
-    new Set(transactions.map((i) => toDate(i.createdAt)?.getFullYear()).filter(Boolean))
+    new Set(transactions.map((i) => i.expenseDate ? Number(i.expenseDate.split("-")[0]) : null).filter(Boolean))
   ).sort((a: any, b: any) => b - a) as number[];
   if (!availableYears.includes(now.getFullYear())) availableYears.unshift(now.getFullYear());
 
-  // ── Loading ──────────────────────────────────────────────────────────────────
   if (!authChecked) return (
     <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center">
       <div className="w-8 h-8 border-4 border-t-cyan-500 border-zinc-800 rounded-full animate-spin mb-4" />
@@ -324,7 +434,6 @@ export default function HomePage() {
     </main>
   );
 
-  // ── Login screen ─────────────────────────────────────────────────────────────
   if (!user) return (
     <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-8">
       <h1 className="text-4xl font-bold mb-2">Family Finance OS</h1>
@@ -335,7 +444,6 @@ export default function HomePage() {
     </main>
   );
 
-  // ── Main App ─────────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-black text-white pb-24">
       <Toaster position="top-center" />
@@ -360,7 +468,7 @@ export default function HomePage() {
       {activeTab === "home" && (
         <div className="px-4 py-4 space-y-4">
 
-          {/* ── NEW: Financial Tip of the Day ── */}
+          {/* Financial Tip of the Day */}
           <div className="bg-gradient-to-br from-cyan-950 to-zinc-900 border border-cyan-800/40 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -377,7 +485,33 @@ export default function HomePage() {
             <p className="text-zinc-600 text-xs mt-2">{tipIndex + 1} of {FINANCIAL_TIPS.length} tips</p>
           </div>
 
-          {/* ── NEW: Both Incomes visible to everyone ── */}
+          {/* One-Tap Recurring Bill Queue */}
+          {pendingBills.length > 0 && (
+            <div className="bg-gradient-to-r from-zinc-900 to-zinc-950 border border-zinc-800 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <CheckCircle2 className="w-4 h-4 text-cyan-400" />
+                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">One-Tap Bill Approvals</p>
+              </div>
+              <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+                {pendingBills.map((bill, index) => (
+                  <div key={bill.id || index} className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3 min-w-[200px] flex flex-col justify-between space-y-2">
+                    <div>
+                      <p className="text-xs text-zinc-400 font-medium truncate">{bill.title}</p>
+                      <p className="text-base font-bold text-white">₹{Number(bill.amount).toLocaleString()}</p>
+                    </div>
+                    <button 
+                      onClick={() => logRecurringBill(bill)}
+                      className="text-xs bg-cyan-500 text-black font-semibold py-1 px-2.5 rounded-lg hover:bg-cyan-400 transition-colors w-full text-center"
+                    >
+                      Approve & Log
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Shared Household Income Display */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-zinc-400 text-sm font-medium">Household Income</p>
@@ -388,7 +522,6 @@ export default function HomePage() {
               )}
             </div>
 
-            {/* Show all members' incomes */}
             <div className="space-y-3 mb-3">
               {Object.entries(incomeMap).map(([uid, data]) => (
                 <div key={uid} className="flex items-center justify-between">
@@ -408,7 +541,6 @@ export default function HomePage() {
               )}
             </div>
 
-            {/* Total bar */}
             {totalHouseholdIncome > 0 && (
               <div className="bg-zinc-800 rounded-xl p-2 mb-3 flex justify-between items-center">
                 <span className="text-xs text-zinc-400">Combined total</span>
@@ -416,7 +548,6 @@ export default function HomePage() {
               </div>
             )}
 
-            {/* Edit my income */}
             <div>
               <p className="text-xs text-zinc-500 mb-1">Your monthly income</p>
               <div className="flex items-center gap-2">
@@ -424,14 +555,14 @@ export default function HomePage() {
                 <input
                   type="number"
                   placeholder="Set your income"
-                  value={myIncome || ""}
-                  onChange={(e) => saveIncome(Number(e.target.value))}
-                  className="bg-zinc-800 p-2 rounded-xl outline-none flex-1 text-lg font-semibold"
+                  value={localIncome}
+                  onChange={(e) => setLocalIncome(e.target.value)}
+                  onBlur={() => saveIncome(Number(localIncome))}
+                  className="bg-zinc-800 p-2 rounded-xl outline-none flex-1 text-lg font-semibold text-white"
                 />
               </div>
             </div>
 
-            {/* Spend progress bar */}
             {totalHouseholdIncome > 0 && (
               <div className="mt-3 h-2 bg-zinc-800 rounded-full overflow-hidden">
                 <div className={`h-full rounded-full transition-all ${
@@ -443,7 +574,7 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* Summary Cards */}
+          {/* Summary Metric Cards */}
           <div className="grid grid-cols-2 gap-3">
             {[
               { label: "Monthly Spend", value: `₹${totalSpend.toLocaleString()}`, icon: Wallet,
@@ -471,35 +602,72 @@ export default function HomePage() {
             })}
           </div>
 
-          {/* Who spent what */}
+          {/* Monthly Share Distribution */}
           {Object.keys(spendByPerson).length > 0 && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-              <p className="text-zinc-400 text-sm mb-3">Who spent what this month</p>
-              <div className="space-y-3">
-                {Object.values(spendByPerson).map((person, i) => (
-                  <div key={i}>
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        {person.photo
-                          ? <img src={person.photo} className="w-7 h-7 rounded-full" alt="" />
-                          : <div className="w-7 h-7 rounded-full bg-cyan-500 flex items-center justify-center text-xs font-bold">{(person.name || "?")[0]}</div>
-                        }
-                        <span className="font-medium text-sm">{(person.name || "Unknown").split(" ")[0]}</span>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-4">
+              <div>
+                <p className="text-zinc-400 text-sm mb-3">Who spent what this month</p>
+                <div className="space-y-3">
+                  {Object.values(spendByPerson).map((person, i) => (
+                    <div key={i}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          {person.photo
+                            ? <img src={person.photo} className="w-7 h-7 rounded-full" alt="" />
+                            : <div className="w-7 h-7 rounded-full bg-cyan-500 flex items-center justify-center text-xs font-bold">{(person.name || "?")[0]}</div>
+                          }
+                          <span className="font-medium text-sm">{(person.name || "Unknown").split(" ")[0]}</span>
+                        </div>
+                        <span className="font-bold text-sm">₹{person.total.toLocaleString()}</span>
                       </div>
-                      <span className="font-bold text-sm">₹{person.total.toLocaleString()}</span>
+                      {totalSpend > 0 && (
+                        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-cyan-500 transition-all" style={{ width: `${(person.total / totalSpend) * 100}%` }} />
+                        </div>
+                      )}
                     </div>
-                    {totalSpend > 0 && (
-                      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full bg-cyan-500 transition-all" style={{ width: `${(person.total / totalSpend) * 100}%` }} />
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
+
+              {/* Fair Share Income-Proportional Monitor Component */}
+              {totalHouseholdIncome > 0 && totalSpend > 0 && (
+                <div className="border-t border-zinc-800 pt-3">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Scale className="w-4 h-4 text-purple-400" />
+                    <p className="text-xs font-semibold text-purple-400 uppercase tracking-wider">Fair Share Balance</p>
+                  </div>
+                  <div className="space-y-2">
+                    {Object.entries(incomeMap).map(([uid, incData]) => {
+                      const incPct = (incData.amount / totalHouseholdIncome) * 100;
+                      const spendPct = ((spendByPerson[uid]?.total || 0) / totalSpend) * 100;
+                      const delta = spendPct - incPct;
+
+                      return (
+                        <div key={uid} className="bg-zinc-950 p-2.5 rounded-xl flex items-center justify-between text-xs">
+                          <div>
+                            <span className="font-medium text-zinc-300">{incData.name.split(" ")[0]}</span>
+                            <p className="text-zinc-500 text-[10px] mt-0.5">
+                              Income Share: {incPct.toFixed(0)}% • Spend Share: {spendPct.toFixed(0)}%
+                            </p>
+                          </div>
+                          <span className={`font-bold px-2 py-0.5 rounded-md ${
+                            Math.abs(delta) <= 5 ? "bg-emerald-950 text-emerald-400" 
+                            : delta > 5 ? "bg-red-950 text-red-400" 
+                            : "bg-amber-950 text-amber-400"
+                          }`}>
+                            {Math.abs(delta) <= 5 ? "In Balance" : delta > 0 ? `+${delta.toFixed(0)}% Over Share` : `${delta.toFixed(0)}% Under Share`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Smart Stats */}
+          {/* Smart Metrics Summary */}
           <div className="space-y-3">
             {biggestExpense && (
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
@@ -538,7 +706,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Recent Transactions */}
+          {/* Recent Ledger History */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-4">
               <p className="font-semibold">Recent Transactions</p>
@@ -564,8 +732,7 @@ export default function HomePage() {
                         </p>
                       </div>
                       <div className="flex items-center justify-between mt-0.5">
-                        {/* NEW: show expense date if available */}
-                        <p className="text-zinc-500 text-xs">{item.category} · {item.paymentMethod}{item.expenseDate ? ` · ${item.expenseDate}` : ""}</p>
+                        <p className="text-zinc-500 text-xs">{item.category} - {item.paymentMethod}{item.expenseDate ? " - " + item.expenseDate : ""}</p>
                         <p className="text-zinc-600 text-xs ml-2 flex-shrink-0">{item.addedBy?.split(" ")[0]}</p>
                       </div>
                     </div>
@@ -599,7 +766,6 @@ export default function HomePage() {
               className="w-full bg-zinc-900 border border-zinc-800 p-4 pl-8 rounded-2xl outline-none text-2xl font-bold" />
           </div>
 
-          {/* ── NEW: Date picker ── */}
           <div>
             <label className="text-xs text-zinc-500 mb-1 block">Date of expense</label>
             <input
@@ -615,233 +781,293 @@ export default function HomePage() {
             {categories.map((c) => <option key={c}>{c}</option>)}
           </select>
 
-          {/* Payment method */}
           <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl outline-none text-base">
-            {paymentMethods.map((p) => <option key={p}>{p}</option>)}
+            {paymentMethods.map((method) => (
+              <option key={method} value={method}>
+                {method}
+              </option>
+            ))}
           </select>
 
-          {/* ── NEW: Credit card sub-dropdown (only shown if Credit Card selected) ── */}
           {paymentMethod === "Credit Card" && (
             <div>
-              <label className="text-xs text-zinc-500 mb-1 block">Select card</label>
+              <label className="text-xs text-zinc-500 mb-1 block">Select Card</label>
               <select
                 value={selectedCard}
                 onChange={(e) => setSelectedCard(e.target.value)}
-                className="w-full bg-zinc-800 border border-cyan-900 p-4 rounded-2xl outline-none text-base text-cyan-300 font-medium"
+                className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl outline-none text-base"
               >
-                {creditCards.map((c) => <option key={c}>{c}</option>)}
+                {creditCards.map((card) => (
+                  <option key={card} value={card}>
+                    {card}
+                  </option>
+                ))}
               </select>
             </div>
           )}
 
-          <div className="grid grid-cols-4 gap-2">
-            {[100, 200, 500, 1000].map((v) => (
-              <button key={v} onClick={() => setAmount((prev) => String(Number(prev || 0) + v))}
-                className="bg-zinc-800 py-3 rounded-2xl text-sm font-semibold hover:bg-zinc-700 transition">
-                +₹{v}
-              </button>
-            ))}
-          </div>
-
-          <button onClick={addExpense} className="w-full bg-cyan-500 py-4 rounded-2xl font-bold text-lg text-black">
-            {editingId ? "Update Expense" : "Save Expense"}
+          <button
+            onClick={addExpense}
+            className="w-full bg-cyan-500 text-black font-bold p-4 rounded-2xl mt-4 text-lg hover:scale-[1.02] transition active:scale-95"
+          >
+            {editingId ? "Update Expense" : "Add Expense"}
           </button>
+
           {editingId && (
-            <button onClick={() => { setEditingId(null); setTitle(""); setAmount(""); setActiveTab("home"); }}
-              className="w-full bg-zinc-800 py-4 rounded-2xl font-semibold">Cancel</button>
+            <button
+              onClick={() => {
+                setEditingId(null);
+                setActiveTab("home");
+              }}
+              className="w-full bg-zinc-800 text-white font-bold p-4 rounded-2xl mt-2 text-lg hover:bg-zinc-700 transition"
+            >
+              Cancel Edit
+            </button>
           )}
         </div>
       )}
 
       {/* ── ANALYTICS TAB ── */}
       {activeTab === "analytics" && (
-        <div className="px-4 py-4 space-y-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-            <p className="text-sm text-zinc-400 mb-3">Filters</p>
-            <div className="grid grid-cols-2 gap-2">
-              <select value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}
-                className="bg-zinc-800 p-3 rounded-xl outline-none text-sm">
-                {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
-              </select>
-              <select value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value))}
-                className="bg-zinc-800 p-3 rounded-xl outline-none text-sm">
-                {availableYears.map((y) => <option key={y}>{y}</option>)}
-              </select>
-              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}
-                className="bg-zinc-800 p-3 rounded-xl outline-none text-sm">
-                <option>All</option>
-                {categories.map((c) => <option key={c}>{c}</option>)}
-              </select>
-              <select value={filterPayment} onChange={(e) => setFilterPayment(e.target.value)}
-                className="bg-zinc-800 p-3 rounded-xl outline-none text-sm">
-                <option>All</option>
-                {paymentMethods.map((p) => <option key={p}>{p}</option>)}
-              </select>
-              <select value={filterWho} onChange={(e) => setFilterWho(e.target.value)}
-                className="bg-zinc-800 p-3 rounded-xl outline-none text-sm col-span-2">
-                <option>All</option>
-                {uniqueNames.map((n: string) => <option key={n}>{n}</option>)}
-              </select>
-            </div>
-            <div className="mt-3 text-cyan-400 text-sm font-semibold">
-              {filteredTransactions.length} transactions · ₹{filteredTransactions.reduce((s, i) => s + Number(i.amount || 0), 0).toLocaleString()}
-            </div>
+        <div className="px-4 py-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold">Analytics</h2>
+            <button 
+              onClick={exportToCSV}
+              className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-850 active:scale-95 transition text-cyan-400 px-3 py-2 rounded-xl flex items-center gap-2 text-xs font-medium"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Excel Export
+            </button>
           </div>
 
+          {/* Filters Matrix */}
+          <div className="grid grid-cols-2 gap-3">
+            <select
+              value={filterMonth}
+              onChange={(e) => setFilterMonth(Number(e.target.value))}
+              className="bg-zinc-900 border border-zinc-800 p-3 rounded-xl outline-none text-sm"
+            >
+              {MONTH_NAMES.map((m, i) => (
+                <option key={m} value={i}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filterYear}
+              onChange={(e) => setFilterYear(Number(e.target.value))}
+              className="bg-zinc-900 border border-zinc-800 p-3 rounded-xl outline-none text-sm"
+            >
+              {availableYears.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="bg-zinc-900 border border-zinc-800 p-3 rounded-xl outline-none text-sm"
+            >
+              <option value="All">All Categories</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filterWho}
+              onChange={(e) => setFilterWho(e.target.value)}
+              className="bg-zinc-900 border border-zinc-800 p-3 rounded-xl outline-none text-sm"
+            >
+              <option value="All">Everyone</option>
+              {uniqueNames.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={filterPayment}
+              onChange={(e) => setFilterPayment(e.target.value)}
+              className="bg-zinc-900 border border-zinc-800 p-3 rounded-xl outline-none text-sm col-span-2"
+            >
+              <option value="All">All Payment Methods & Cards</option>
+              {uniquePayments.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Category Pie Chart */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-            <p className="font-semibold mb-4">Spend by Category</p>
-            {pieData.length === 0
-              ? <p className="text-zinc-500 text-center py-8 text-sm">No data for this period</p>
-              : <>
-                  <ResponsiveContainer width="100%" height={200}>
+            <p className="font-semibold mb-4 text-zinc-200">Spend by Category</p>
+            {pieData.length > 0 ? (
+              <>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value" paddingAngle={3}>
-                        {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {pieData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                        ))}
                       </Pie>
-                      <Tooltip formatter={(v: any) => `₹${Number(v).toLocaleString()}`}
-                        contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 12 }} />
+                      <Tooltip
+  formatter={(value: any) => "₹" + Number(value).toLocaleString()}
+  contentStyle={{ backgroundColor: "#18181b", border: "none", borderRadius: "8px", color: "#fff" }}
+  itemStyle={{ color: "#fff" }}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
-                  <div className="space-y-2 mt-2">
-                    {pieData.slice(0, 6).map((item, i) => (
-                      <div key={i} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                          <span className="text-sm text-zinc-300">{item.name}</span>
-                        </div>
-                        <span className="text-sm font-semibold">₹{item.value.toLocaleString()}</span>
+                </div>
+                <div className="space-y-3 mt-6">
+                  {pieData.map((entry, index) => (
+                    <div key={index} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
+                        />
+                        <span className="text-zinc-300">{entry.name}</span>
                       </div>
-                    ))}
-                  </div>
-                </>
-            }
-          </div>
-
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-            <p className="font-semibold mb-4">Spend by Payment Method</p>
-            {paymentPieData.length === 0
-              ? <p className="text-zinc-500 text-center py-8 text-sm">No data for this period</p>
-              : <>
-                  <ResponsiveContainer width="100%" height={180}>
-                    <PieChart>
-                      <Pie data={paymentPieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={3}>
-                        {paymentPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip formatter={(v: any) => `₹${Number(v).toLocaleString()}`}
-                        contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 12 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="space-y-2 mt-2">
-                    {paymentPieData.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                          <span className="text-sm text-zinc-300">{item.name}</span>
-                        </div>
-                        <span className="text-sm font-semibold">₹{item.value.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-            }
-          </div>
-
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-            <p className="font-semibold mb-4">6-Month Comparison</p>
-            <ResponsiveContainer width="100%" height={220}>
-              <ReBarChart data={monthlyComparison} barSize={28}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                <XAxis dataKey="month" stroke="#71717a" tick={{ fontSize: 12 }} />
-                <YAxis stroke="#71717a" tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(v: any) => `₹${Number(v).toLocaleString()}`}
-                  contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 12 }} />
-                <Bar dataKey="total" fill="url(#barGrad)" radius={[6, 6, 0, 0]} />
-                <defs>
-                  <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#06b6d4" />
-                    <stop offset="100%" stopColor="#3b82f6" />
-                  </linearGradient>
-                </defs>
-              </ReBarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-            <p className="font-semibold mb-4">{MONTH_NAMES[filterMonth]} {filterYear} Transactions</p>
-            {filteredTransactions.length === 0
-              ? <p className="text-zinc-500 text-sm text-center py-6">No transactions match your filters.</p>
-              : <div className="space-y-3">
-                  {filteredTransactions.map((item, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      {item.addedByPhoto
-                        ? <img src={item.addedByPhoto} className="w-7 h-7 rounded-full flex-shrink-0" alt="" />
-                        : <div className="w-7 h-7 rounded-full bg-cyan-700 flex items-center justify-center text-xs font-bold flex-shrink-0">{(item.addedBy || "?")[0]}</div>
-                      }
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{item.title}</p>
-                        <p className="text-zinc-500 text-xs">{item.category} · {item.addedBy?.split(" ")[0]}{item.expenseDate ? ` · ${item.expenseDate}` : ""}</p>
-                      </div>
-                      <p className="font-bold text-sm flex-shrink-0">₹{Number(item.amount).toLocaleString()}</p>
+                      <span className="font-semibold text-white">₹{entry.value.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
-            }
+              </>
+            ) : (
+              <p className="text-zinc-500 text-sm text-center py-10">No data for selected filters.</p>
+            )}
+          </div>
+
+          {/* Monthly Comparison Bar Chart */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <p className="font-semibold mb-4 text-zinc-200">Last 6 Months</p>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <ReBarChart data={monthlyComparison}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                  <XAxis dataKey="month" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis
+                    stroke="#a1a1aa"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(val) => "₹" + (val / 1000) + "k"}
+                  />
+                  <Tooltip
+  cursor={{ fill: "#27272a" }}
+  formatter={(value: any) => "₹" + Number(value).toLocaleString()}
+  contentStyle={{ backgroundColor: "#18181b", border: "none", borderRadius: "8px", color: "#fff" }}
+/>
+                  <Bar dataKey="total" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                </ReBarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
       )}
 
       {/* ── BUDGETS TAB ── */}
       {activeTab === "budgets" && (
-        <div className="px-4 py-4 space-y-3">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-2">
-            <p className="font-semibold mb-1">Category Budgets</p>
-            <p className="text-zinc-400 text-sm">Tap the amount to change your budget.</p>
+        <div className="px-4 py-6 space-y-4">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-2xl font-bold">Monthly Budgets</h2>
+            <button className="text-cyan-400 text-sm font-medium hover:text-cyan-300 transition">Edit</button>
           </div>
-          {budgetProgress.map(({ cat, budget, spent, pct }) => (
-            <div key={cat} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="font-medium text-sm">{cat}</p>
-                <div className="flex items-center gap-1">
-                  <span className={`text-sm font-bold ${pct >= 100 ? "text-red-400" : pct >= 80 ? "text-yellow-400" : "text-emerald-400"}`}>
-                    ₹{spent.toLocaleString()}
-                  </span>
-                  <span className="text-zinc-600 text-sm">/</span>
-                  <input type="number" value={budget}
-                    onChange={(e) => setBudgets((prev) => ({ ...prev, [cat]: Number(e.target.value) }))}
-                    className="bg-zinc-800 text-sm w-20 px-2 py-1 rounded-lg outline-none text-right font-semibold" />
+
+          <div className="space-y-4">
+            {budgetProgress.map((b, i) => (
+              <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-medium text-zinc-200">{b.cat}</p>
+                  <p className="text-sm">
+                    <span className={b.spent > b.budget ? "text-red-400 font-bold" : "text-white font-semibold"}>
+                      ₹{b.spent.toLocaleString()}
+                    </span>
+                    <span className="text-zinc-500"> / ₹{b.budget.toLocaleString()}</span>
+                  </p>
                 </div>
+                <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      b.pct >= 100 ? "bg-red-500" : b.pct >= 80 ? "bg-yellow-400" : "bg-emerald-400"
+                    }`}
+                    style={{ width: `${b.pct}%` }}
+                  />
+                </div>
+                {b.pct >= 100 && (
+                  <p className="text-red-400 text-xs mt-2 font-medium">
+                    Over budget by ₹{(b.spent - b.budget).toLocaleString()}
+                  </p>
+                )}
               </div>
-              <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-yellow-400" : "bg-emerald-400"}`}
-                  style={{ width: `${pct}%` }} />
-              </div>
-              <div className="flex justify-between mt-1">
-                <span className="text-zinc-600 text-xs">{pct.toFixed(0)}% used</span>
-                <span className="text-zinc-600 text-xs">
-                  {budget - spent >= 0 ? `₹${(budget - spent).toLocaleString()} left` : `₹${(spent - budget).toLocaleString()} over`}
-                </span>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
-      {/* ── Bottom Nav ── */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-zinc-950 border-t border-zinc-800 flex items-center justify-around px-2 py-3 z-20">
-        {[
-          { tab: "home", icon: Home, label: "Home" },
-          { tab: "add", icon: PlusCircle, label: "Add" },
-          { tab: "analytics", icon: BarChart, label: "Analytics" },
-          { tab: "budgets", icon: Settings, label: "Budgets" },
-        ].map(({ tab, icon: Icon, label }) => (
-          <button key={tab} onClick={() => setActiveTab(tab as any)}
-            className={`flex flex-col items-center gap-1 px-4 py-1 rounded-xl transition ${activeTab === tab ? "text-cyan-400" : "text-zinc-500"}`}>
-            <Icon className="w-6 h-6" />
-            <span className="text-xs">{label}</span>
-          </button>
-        ))}
-      </nav>
+      {/* ── BOTTOM NAVIGATION ── */}
+      <div className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-md border-t border-zinc-800 flex items-center justify-around p-4 pb-safe z-50">
+        <button
+          onClick={() => setActiveTab("home")}
+          className={`flex flex-col items-center gap-1 transition-colors ${
+            activeTab === "home" ? "text-cyan-400" : "text-zinc-500 hover:text-zinc-300"
+          }`}
+        >
+          <Home className="w-6 h-6" />
+          <span className="text-[10px] font-medium">Home</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("analytics")}
+          className={`flex flex-col items-center gap-1 transition-colors ${
+            activeTab === "analytics" ? "text-cyan-400" : "text-zinc-500 hover:text-zinc-300"
+          }`}
+        >
+          <BarChart className="w-6 h-6" />
+          <span className="text-[10px] font-medium">Analytics</span>
+        </button>
+        
+        <button
+          onClick={() => {
+            setEditingId(null);
+            setTitle("");
+            setAmount("");
+            setActiveTab("add");
+          }}
+          className="relative -top-5 bg-cyan-500 text-black p-4 rounded-full shadow-lg shadow-cyan-500/20 hover:scale-110 hover:bg-cyan-400 transition-all active:scale-95"
+        >
+          <PlusCircle className="w-7 h-7" />
+        </button>
+
+        <button
+          onClick={() => setActiveTab("budgets")}
+          className={`flex flex-col items-center gap-1 transition-colors ${
+            activeTab === "budgets" ? "text-cyan-400" : "text-zinc-500 hover:text-zinc-300"
+          }`}
+        >
+          <Wallet className="w-6 h-6" />
+          <span className="text-[10px] font-medium">Budgets</span>
+        </button>
+        <button className="flex flex-col items-center gap-1 text-zinc-500 hover:text-zinc-300 transition-colors">
+          <Settings className="w-6 h-6" />
+          <span className="text-[10px] font-medium">Settings</span>
+        </button>
+      </div>
     </main>
   );
 }
