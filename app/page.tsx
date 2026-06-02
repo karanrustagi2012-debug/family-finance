@@ -141,6 +141,7 @@ export default function HomePage() {
   const [localIncome, setLocalIncome] = useState("");
 
   const [budgets, setBudgets] = useState<Record<string, number>>(DEFAULT_BUDGETS);
+  const [isEditingBudgets, setIsEditingBudgets] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
   
   // Real-time stream state for dynamic recurring subscriptions
@@ -185,6 +186,17 @@ export default function HomePage() {
       const map: Record<string, { name: string; photo: string; amount: number }> = {};
       snap.forEach((d) => { map[d.id] = d.data() as any; });
       setIncomeMap(map);
+    });
+    return () => unsub();
+  }, [user]);
+
+  // ── Firestore: budgets ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(doc(db, "settings", "budgets"), (docSnap) => {
+      if (docSnap.exists()) {
+        setBudgets(docSnap.data() as Record<string, number>);
+      }
     });
     return () => unsub();
   }, [user]);
@@ -333,6 +345,24 @@ export default function HomePage() {
     }
   };
 
+  // Save updated household budgets to Firestore
+  const saveBudgetsToFirestore = async () => {
+    try {
+      await setDoc(doc(db, "settings", "budgets"), budgets);
+      setIsEditingBudgets(false);
+      toast.success("Budgets saved successfully! 💰");
+    } catch {
+      toast.error("Failed to persist budget updates.");
+    }
+  };
+
+  const handleBudgetChange = (cat: string, val: string) => {
+    setBudgets((prev) => ({
+      ...prev,
+      [cat]: Number(val) || 0,
+    }));
+  };
+
   const deleteTransaction = async (id: string, ownerUid: string) => {
     if (ownerUid !== user?.uid) { toast.error("You can only delete your own expenses."); return; }
     
@@ -399,13 +429,13 @@ export default function HomePage() {
   // ── Computed States Evaluated Against expenseDate ──
   const now = new Date();
 
-  const thisMonthTx = transactions.filter((item) => {
+  const thisMonthTx = transactions.filter((item: any) => {
     if (!item.expenseDate) return false;
     const [y, m] = item.expenseDate.split("-").map(Number);
     return (m - 1) === now.getMonth() && y === now.getFullYear();
   });
 
-  const lastMonthTx = transactions.filter((item) => {
+  const lastMonthTx = transactions.filter((item: any) => {
     if (!item.expenseDate) return false;
     const [y, m] = item.expenseDate.split("-").map(Number);
     const lm = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
@@ -413,14 +443,14 @@ export default function HomePage() {
     return (m - 1) === lm && y === ly;
   });
 
-  const totalSpend = thisMonthTx.reduce((s, i) => s + Number(i.amount || 0), 0);
-  const lastMonthTotal = lastMonthTx.reduce((s, i) => s + Number(i.amount || 0), 0);
+  const totalSpend = thisMonthTx.reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
+  const lastMonthTotal = lastMonthTx.reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
   const pctChange = lastMonthTotal ? (((totalSpend - lastMonthTotal) / lastMonthTotal) * 100).toFixed(1) : null;
   const savings = totalHouseholdIncome - totalSpend;
 
   // Upgraded flexible partial-matching logic so user-logged actions also clear the queue
-  const pendingBills = recurringBills.filter((blueprint) => {
-    return !thisMonthTx.some((tx) => {
+  const pendingBills = recurringBills.filter((blueprint: any) => {
+    return !thisMonthTx.some((tx: any) => {
       const txTitle = tx.title.toLowerCase();
       const bpTitle = blueprint.title.toLowerCase();
       return txTitle.includes(bpTitle) || bpTitle.includes(txTitle);
@@ -430,23 +460,23 @@ export default function HomePage() {
   const sevenDaysAgo = new Date(); 
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const weeklySpend = transactions
-    .filter((i) => {
+    .filter((i: any) => {
       if (!i.expenseDate) return false;
       return new Date(i.expenseDate) >= sevenDaysAgo;
     })
-    .reduce((s, i) => s + Number(i.amount || 0), 0);
+    .reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
 
   const creditUsage = transactions
-    .filter((i) => i.paymentMethod && i.paymentMethod.indexOf("Credit Card") === 0)
-    .reduce((s, i) => s + Number(i.amount || 0), 0);
+    .filter((i: any) => i.paymentMethod && i.paymentMethod.indexOf("Credit Card") === 0)
+    .reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
 
   const spendByPerson: Record<string, { name: string; photo: string; total: number }> = {};
-  thisMonthTx.forEach((item) => {
+  thisMonthTx.forEach((item: any) => {
     if (!spendByPerson[item.uid]) spendByPerson[item.uid] = { name: item.addedBy || "Unknown", photo: item.addedByPhoto || "", total: 0 };
     spendByPerson[item.uid].total += Number(item.amount || 0);
   });
 
-  const filteredTransactions = transactions.filter((item) => {
+  const filteredTransactions = transactions.filter((item: any) => {
     if (!item.expenseDate) return false;
     const [y, m] = item.expenseDate.split("-").map(Number);
     if ((m - 1) !== filterMonth || y !== filterYear) return false;
@@ -457,38 +487,38 @@ export default function HomePage() {
   });
 
   const categoryMap: Record<string, number> = {};
-  filteredTransactions.forEach((item) => { categoryMap[item.category] = (categoryMap[item.category] || 0) + Number(item.amount || 0); });
-  const pieData = Object.entries(categoryMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  filteredTransactions.forEach((item: any) => { categoryMap[item.category] = (categoryMap[item.category] || 0) + Number(item.amount || 0); });
+  const pieData = Object.entries(categoryMap).map(([name, value]) => ({ name, value })).sort((a: any, b: any) => b.value - a.value);
 
   const monthlyComparison = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
     const m = d.getMonth(); const y = d.getFullYear();
     const total = transactions
-      .filter((item) => {
+      .filter((item: any) => {
         if (!item.expenseDate) return false;
         const [itemY, itemM] = item.expenseDate.split("-").map(Number);
         return (itemM - 1) === m && itemY === y;
       })
-      .reduce((s, item) => s + Number(item.amount || 0), 0);
+      .reduce((s: number, item: any) => s + Number(item.amount || 0), 0);
     return { month: MONTH_NAMES[m], total };
   });
 
-  const biggestExpense = thisMonthTx.reduce((max, item) => Number(item.amount) > Number(max?.amount || 0) ? item : max, null as any);
+  const biggestExpense = thisMonthTx.reduce((max: any, item: any) => Number(item.amount) > Number(max?.amount || 0) ? item : max, null as any);
   const topCategory = pieData[0];
   const daysPassedThisMonth = now.getDate();
   const dailyAvg = daysPassedThisMonth > 0 ? Math.round(totalSpend / daysPassedThisMonth) : 0;
 
   const budgetProgress = Object.entries(budgets).map(([cat, budget]) => {
-    const spent = thisMonthTx.filter((i) => i.category === cat).reduce((s, i) => s + Number(i.amount || 0), 0);
+    const spent = thisMonthTx.filter((i: any) => i.category === cat).reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
     const pct = Math.min((spent / budget) * 100, 100);
     return { cat, budget, spent, pct };
   });
 
-  const uniqueNames = Array.from(new Set(transactions.map((i) => i.addedBy).filter(Boolean)));
-  const uniquePayments = Array.from(new Set(transactions.map((i) => i.paymentMethod).filter(Boolean)));
+  const uniqueNames = Array.from(new Set(transactions.map((i: any) => i.addedBy).filter(Boolean))) as string[];
+  const uniquePayments = Array.from(new Set(transactions.map((i: any) => i.paymentMethod).filter(Boolean))) as string[];
   
   const availableYears = Array.from(
-    new Set(transactions.map((i) => i.expenseDate ? Number(i.expenseDate.split("-")[0]) : null).filter(Boolean))
+    new Set(transactions.map((i: any) => i.expenseDate ? Number(i.expenseDate.split("-")[0]) : null).filter(Boolean))
   ).sort((a: any, b: any) => b - a) as number[];
   if (!availableYears.includes(now.getFullYear())) availableYears.unshift(now.getFullYear());
 
@@ -517,7 +547,7 @@ export default function HomePage() {
       <div className="sticky top-0 z-10 bg-black/80 backdrop-blur border-b border-zinc-800 px-4 py-3 flex items-center justify-between">
         <h1 className="text-lg font-bold">Family Finance OS</h1>
         <div className="flex items-center gap-2">
-          {Object.values(spendByPerson).map((person, i) => (
+          {Object.values(spendByPerson).map((person: any, i: number) => (
             <div key={i} className="flex items-center gap-1 bg-zinc-800 px-2 py-1 rounded-full">
               {person.photo
                 ? <img src={person.photo} className="w-5 h-5 rounded-full" alt="" />
@@ -550,7 +580,7 @@ export default function HomePage() {
             <p className="text-zinc-600 text-xs mt-2">{tipIndex + 1} of {FINANCIAL_TIPS.length} tips</p>
           </div>
 
-          {/* One-Tap Recurring Bill Queue with Edit Mode Handling */}
+          {/* One-Tap Recurring Bill Queue */}
           {pendingBills.length > 0 && (
             <div className="bg-gradient-to-r from-zinc-900 to-zinc-950 border border-zinc-800 rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-3">
@@ -624,7 +654,7 @@ export default function HomePage() {
             </div>
 
             <div className="space-y-3 mb-3">
-              {Object.entries(incomeMap).map(([uid, data]) => (
+              {Object.entries(incomeMap).map(([uid, data]: [string, any]) => (
                 <div key={uid} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     {data.photo
@@ -709,7 +739,7 @@ export default function HomePage() {
               <div>
                 <p className="text-zinc-400 text-sm mb-3">Who spent what this month</p>
                 <div className="space-y-3">
-                  {Object.values(spendByPerson).map((person, i) => (
+                  {Object.values(spendByPerson).map((person: any, i: number) => (
                     <div key={i}>
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
@@ -731,7 +761,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Fair Share Income-Proportional Monitor Component */}
+              {/* Fair Share Income-Proportional Monitor */}
               {totalHouseholdIncome > 0 && totalSpend > 0 && (
                 <div className="border-t border-zinc-800 pt-3">
                   <div className="flex items-center gap-1.5 mb-2">
@@ -739,7 +769,7 @@ export default function HomePage() {
                     <p className="text-xs font-semibold text-purple-400 uppercase tracking-wider">Fair Share Balance</p>
                   </div>
                   <div className="space-y-2">
-                    {Object.entries(incomeMap).map(([uid, incData]) => {
+                    {Object.entries(incomeMap).map(([uid, incData]: [string, any]) => {
                       const incPct = (incData.amount / totalHouseholdIncome) * 100;
                       const spendPct = ((spendByPerson[uid]?.total || 0) / totalSpend) * 100;
                       const delta = spendPct - incPct;
@@ -1028,7 +1058,7 @@ export default function HomePage() {
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(value: any) => "₹" + Number(value).toLocaleString()}
+                        formatter={(value: any) => `₹${Number(value).toLocaleString()}` as any}
                         contentStyle={{ backgroundColor: "#18181b", border: "none", borderRadius: "8px", color: "#fff" }}
                         itemStyle={{ color: "#fff" }}
                       />
@@ -1036,7 +1066,7 @@ export default function HomePage() {
                   </ResponsiveContainer>
                 </div>
                 <div className="space-y-3 mt-6">
-                  {pieData.map((entry, index) => (
+                  {pieData.map((entry: any, index: number) => (
                     <div key={index} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-3">
                         <div
@@ -1072,7 +1102,7 @@ export default function HomePage() {
                   />
                   <Tooltip
                     cursor={{ fill: "#27272a" }}
-                    formatter={(value: any) => "₹" + Number(value).toLocaleString()}
+                    formatter={(value: any) => `₹${Number(value).toLocaleString()}` as any}
                     contentStyle={{ backgroundColor: "#18181b", border: "none", borderRadius: "8px", color: "#fff" }}
                   />
                   <Bar dataKey="total" fill="#06b6d4" radius={[4, 4, 0, 0]} />
@@ -1088,37 +1118,77 @@ export default function HomePage() {
         <div className="px-4 py-6 space-y-4">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-2xl font-bold">Monthly Budgets</h2>
-            <button className="text-cyan-400 text-sm font-medium hover:text-cyan-300 transition">Edit</button>
+            <button 
+              onClick={() => {
+                if (isEditingBudgets) {
+                  saveBudgetsToFirestore();
+                } else {
+                  setIsEditingBudgets(true);
+                }
+              }}
+              className="text-cyan-400 text-sm font-medium hover:text-cyan-300 transition bg-zinc-900 px-3 py-1.5 rounded-xl border border-zinc-800"
+            >
+              {isEditingBudgets ? "Save Changes" : "Edit Limits"}
+            </button>
           </div>
 
-          <div className="space-y-4">
-            {budgetProgress.map((b, i) => (
-              <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="font-medium text-zinc-200">{b.cat}</p>
-                  <p className="text-sm">
-                    <span className={b.spent > b.budget ? "text-red-400 font-bold" : "text-white font-semibold"}>
-                      ₹{b.spent.toLocaleString()}
-                    </span>
-                    <span className="text-zinc-500"> / ₹{b.budget.toLocaleString()}</span>
-                  </p>
-                </div>
-                <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      b.pct >= 100 ? "bg-red-500" : b.pct >= 80 ? "bg-yellow-400" : "bg-emerald-400"
-                    }`}
-                    style={{ width: `${b.pct}%` }}
-                  />
-                </div>
-                {b.pct >= 100 && (
-                  <p className="text-red-400 text-xs mt-2 font-medium">
-                    Over budget by ₹{(b.spent - b.budget).toLocaleString()}
-                  </p>
-                )}
+          {isEditingBudgets ? (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-4">
+              <p className="text-xs text-zinc-400 font-medium uppercase tracking-wider">Modify Category Spending Caps</p>
+              <div className="grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto pr-1">
+                {Object.keys(budgets).map((cat) => (
+                  <div key={cat} className="flex flex-col space-y-1 bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                    <label className="text-xs font-medium text-zinc-300">{cat}</label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-zinc-500 font-semibold">₹</span>
+                      <input
+                        type="number"
+                        value={budgets[cat] || ""}
+                        onChange={(e) => handleBudgetChange(cat, e.target.value)}
+                        className="bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-sm text-white font-bold w-full outline-none focus:border-cyan-500"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+              <button
+                onClick={saveBudgetsToFirestore}
+                className="w-full bg-cyan-500 text-black text-sm font-bold p-3 rounded-xl hover:bg-cyan-400 transition"
+              >
+                Apply Allocation Limits
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {budgetProgress.map((b, i) => (
+                <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-medium text-zinc-200">{b.cat}</p>
+                    <p className="text-sm">
+                      <span className={b.spent > b.budget ? "text-red-400 font-bold" : "text-white font-semibold"}>
+                        ₹{b.spent.toLocaleString()}
+                      </span>
+                      <span className="text-zinc-500"> / ₹{b.budget.toLocaleString()}</span>
+                    </p>
+                  </div>
+                  <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        b.pct >= 100 ? "bg-red-500" : b.pct >= 80 ? "bg-yellow-400" : "bg-emerald-400"
+                      }`}
+                      style={{ width: `${b.pct}%` }}
+                    />
+                  </div>
+                  {b.pct >= 100 && (
+                    <p className="text-red-400 text-xs mt-2 font-medium">
+                      Over budget by ₹{(b.spent - b.budget).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1205,7 +1275,7 @@ export default function HomePage() {
               <p className="text-zinc-600 text-xs text-center py-6">No subscription templates set up yet.</p>
             ) : (
               <div className="space-y-2">
-                {recurringBills.map((bill) => (
+                {recurringBills.map((bill: any) => (
                   <div key={bill.id} className="bg-zinc-900 border border-zinc-800/60 p-3 rounded-xl flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-white">{bill.title}</p>
@@ -1259,7 +1329,7 @@ export default function HomePage() {
             setAmount("");
             setActiveTab("add");
           }}
-          className="relative -top-5 bg-cyan-500 text-black p-4 rounded-full shadow-lg shadow-cyan-500/20 hover:scale-110 hover:bg-cyan-400 transition-all active:scale-95"
+          className="relative -top-5 bg-cyan-500 text-black p-4 rounded-full shadow-lg shadow-cyan-500/20 hover:scale-110 hover:bg-cyan-400 transition-all active:scale-[0.93]"
         >
           <PlusCircle className="w-7 h-7" />
         </button>
@@ -1274,7 +1344,6 @@ export default function HomePage() {
           <span className="text-[10px] font-medium">Budgets</span>
         </button>
         
-        {/* Swapped dead settings tab with the dynamic subscriptions portal */}
         <button
           onClick={() => setActiveTab("subscriptions")}
           className={`flex flex-col items-center gap-1 transition-colors ${
