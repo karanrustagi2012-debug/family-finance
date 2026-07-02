@@ -457,31 +457,29 @@ export default function HomePage() {
 
   // ── Computed States Evaluated Against Filter Specifications ──
   const now = new Date();
+  const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; // E.g. "2026-07"
 
+  // Timezone-safe string matching filters
   const thisMonthTx = transactions.filter((item: any) => {
-    if (!item.expenseDate) return false;
-    const [y, m] = item.expenseDate.split("-").map(Number);
-    return (m - 1) === now.getMonth() && y === now.getFullYear();
+    return item.expenseDate && item.expenseDate.startsWith(currentMonthPrefix);
   });
 
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthPrefix = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
+  
   const lastMonthTx = transactions.filter((item: any) => {
-    if (!item.expenseDate) return false;
-    const [y, m] = item.expenseDate.split("-").map(Number);
-    const lm = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
-    const ly = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-    return (m - 1) === lm && y === ly;
+    return item.expenseDate && item.expenseDate.startsWith(lastMonthPrefix);
   });
 
   const totalSpend = thisMonthTx.reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
   const lastMonthTotal = lastMonthTx.reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
   const pctChange = lastMonthTotal ? (((totalSpend - lastMonthTotal) / lastMonthTotal) * 100).toFixed(1) : null;
   
-  // Realized savings computed dynamically based on localized monthly dynamic inputs
+  // High-reliability layout context income calculations
   const currentMonthIncomeCalculated = incomeRecords.filter((item: any) => {
-    if (!item.date) return false;
-    const [y, m] = item.date.split("-").map(Number);
-    return (m - 1) === now.getMonth() && y === now.getFullYear();
+    return item.date && item.date.startsWith(currentMonthPrefix);
   }).reduce((s, v) => s + Number(v.amount || 0), 0);
+
   const savings = currentMonthIncomeCalculated - totalSpend;
 
   // Upgraded flexible partial-matching logic so user-logged actions also clear the queue
@@ -553,21 +551,14 @@ export default function HomePage() {
     const targetDate = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
     const m = targetDate.getMonth();
     const y = targetDate.getFullYear();
+    const loopPrefix = `${y}-${String(m + 1).padStart(2, '0')}`;
 
     const monthExpensesComputed = transactions
-      .filter((item: any) => {
-        if (!item.expenseDate) return false;
-        const [itemY, itemM] = item.expenseDate.split("-").map(Number);
-        return (itemM - 1) === m && itemY === y;
-      })
+      .filter((item: any) => item.expenseDate && item.expenseDate.startsWith(loopPrefix))
       .reduce((s: number, item: any) => s + Number(item.amount || 0), 0);
 
     const monthIncomeComputed = incomeRecords
-      .filter((item: any) => {
-        if (!item.date) return false;
-        const [itemY, itemM] = item.date.split("-").map(Number);
-        return (itemM - 1) === m && itemY === y;
-      })
+      .filter((item: any) => item.date && item.date.startsWith(loopPrefix))
       .reduce((s: number, item: any) => s + Number(item.amount || 0), 0);
 
     return {
@@ -810,16 +801,16 @@ export default function HomePage() {
           {/* Summary Metric Cards */}
           <div className="grid grid-cols-2 gap-3">
             {[
+              { label: "Total Income", value: `₹${currentMonthIncomeCalculated.toLocaleString()}`, icon: TrendingUp,
+                sub: "Logged pool", subColor: "text-emerald-400" },
               { label: "Monthly Spend", value: `₹${totalSpend.toLocaleString()}`, icon: Wallet,
                 sub: pctChange ? `${Number(pctChange) > 0 ? "+" : ""}${pctChange}% vs last month` : "This month",
                 subColor: pctChange && Number(pctChange) > 0 ? "text-red-400" : "text-emerald-400" },
-              { label: "Savings Portfolio", value: `₹${Math.abs(savings).toLocaleString()}`, icon: PiggyBank,
+              { label: "Net Savings", value: `${savings < 0 ? "-" : ""}₹${Math.abs(savings).toLocaleString()}`, icon: PiggyBank,
                 sub: savings >= 0 ? "On track ✅" : "Overspent ⚠️",
                 subColor: savings >= 0 ? "text-emerald-400" : "text-red-400" },
-              { label: "Weekly Burn", value: `₹${weeklySpend.toLocaleString()}`, icon: TrendingUp,
+              { label: "Weekly Burn", value: `₹${weeklySpend.toLocaleString()}`, icon: BarChart2,
                 sub: "Last 7 days", subColor: "text-zinc-500" },
-              { label: "Credit Used", value: `₹${creditUsage.toLocaleString()}`, icon: CreditCard,
-                sub: "All time", subColor: "text-zinc-500" },
             ].map((card, i) => {
               const Icon = card.icon;
               return (
@@ -872,7 +863,7 @@ export default function HomePage() {
                   </div>
                   <div className="space-y-2">
                     {Array.from(new Set(incomeRecords.map(r => r.uid))).map((uid) => {
-                      const userIncomes = incomeRecords.filter(r => r.uid === uid && new Date(r.date).getMonth() === now.getMonth() && new Date(r.date).getFullYear() === now.getFullYear());
+                      const userIncomes = incomeRecords.filter(r => r.uid === uid && r.date && r.date.startsWith(currentMonthPrefix));
                       const name = userIncomes[0]?.addedBy || "Unknown";
                       const userIncomeTotal = userIncomes.reduce((s, c) => s + c.amount, 0);
 
