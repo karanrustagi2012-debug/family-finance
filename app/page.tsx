@@ -2,7 +2,11 @@
 
 import { auth, db } from "@/lib/firebase";
 import { GoogleAuthProvider, signInWithPopup, getRedirectResult, onAuthStateChanged } from "firebase/auth";
-import { Wallet, TrendingUp, PiggyBank, CreditCard, Zap, BarChart2, Tag, Home, PlusCircle, BarChart, Settings, Lightbulb, RefreshCw, Download, CheckCircle2, Scale } from "lucide-react";
+import { 
+  Wallet, TrendingUp, PiggyBank, CreditCard, Zap, BarChart2, Tag, Home, 
+  PlusCircle, BarChart, Settings, Lightbulb, RefreshCw, Download, 
+  CheckCircle2, Scale, Search, LogOut 
+} from "lucide-react";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
   deleteDoc, doc, updateDoc, setDoc,
@@ -11,7 +15,7 @@ import { useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid,
+  BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Legend
 } from "recharts";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -32,6 +36,7 @@ const creditCards = [
   "HDFC Swiggy",
   "Corporate HDFC",
   "Amazon ICICI Card",
+  "HSBC Live +",
 ];
 
 const PIE_COLORS = [
@@ -69,7 +74,6 @@ const FINANCIAL_TIPS = [
   { tip: "Check your free credit score (CIBIL) quarterly. Look out for any wrong accounts or errors that could hurt your loan eligibility.", icon: "🔍" },
   { tip: "When booking flights, clear your browser cookies or use incognito mode. Dynamic pricing can artificially bump up airfares.", icon: "✈️" },
   { tip: "Buy grocery staples in bulk once a month. Items like rice, oil, and lentils are significantly cheaper when bought in larger quantities.", icon: "🌾" },
-  { tip: "Track your net worth once every six months. Seeing your total assets minus liabilities grow over time is incredibly motivating.", icon: "🏆" },
   { tip: "Keep your emergency fund in a separate bank account or a liquid mutual fund so you aren't tempted to swipe it for routine expenses.", icon: "🏦" },
   { tip: "Health insurance is non-negotiable. Don't rely solely on corporate insurance; get a personal family floater policy early in life.", icon: "🏥" },
   { tip: "Automate your utility bill payments (electricity, internet, postpaid). Missing due dates costs money in late fees and drops credit scores.", icon: "🔌" },
@@ -135,10 +139,14 @@ export default function HomePage() {
     return dayOfYear % FINANCIAL_TIPS.length;
   });
 
-  // Global income state map from Firestore
-  const [incomeMap, setIncomeMap] = useState<Record<string, { name: string; photo: string; amount: number }>>({});
-  // Local state for user income input buffer
-  const [localIncome, setLocalIncome] = useState("");
+  // Global Dynamic Income Streams (Historical Logging)
+  const [incomeRecords, setIncomeRecords] = useState<any[]>([]);
+  const [incAmount, setIncAmount] = useState("");
+  const [incSource, setIncSource] = useState("");
+  const [incDate, setIncDate] = useState(() => new Date().toISOString().split("T")[0]);
+
+  // Ledger Search Filtration State
+  const [ledgerSearchTerm, setLedgerSearchTerm] = useState("");
 
   const [budgets, setBudgets] = useState<Record<string, number>>(DEFAULT_BUDGETS);
   const [isEditingBudgets, setIsEditingBudgets] = useState(false);
@@ -179,13 +187,14 @@ export default function HomePage() {
     return () => unsub();
   }, [user]);
 
-  // ── Firestore: incomes ──────────────────────────────────────────────────────
+  // ── Firestore: Income Log History ───────────────────────────────────────────
   useEffect(() => {
-    if (!user) return;
-    const unsub = onSnapshot(collection(db, "incomes"), (snap) => {
-      const map: Record<string, { name: string; photo: string; amount: number }> = {};
-      snap.forEach((d) => { map[d.id] = d.data() as any; });
-      setIncomeMap(map);
+    if (!user) { setIncomeRecords([]); return; }
+    const q = query(collection(db, "income_records"), orderBy("date", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const items: any[] = [];
+      snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+      setIncomeRecords(items);
     });
     return () => unsub();
   }, [user]);
@@ -212,20 +221,40 @@ export default function HomePage() {
     return () => unsub();
   }, [user]);
 
-  // Sync global income changes down to local form field
-  useEffect(() => {
-    if (user && incomeMap[user.uid]) {
-      setLocalIncome(incomeMap[user.uid].amount.toString());
-    }
-  }, [incomeMap, user]);
-
-  const saveIncome = async (value: number) => {
+  // ── Action Handlers ─────────────────────────────────────────────────────────
+  const logIncomeHistory = async () => {
     if (!user) return;
-    const ref = doc(db, "incomes", user.uid);
-    await setDoc(ref, { name: user.displayName || "Unknown", photo: user.photoURL || "", amount: value }, { merge: true });
+    if (!incAmount || !incSource.trim()) {
+      toast.error("Enter a valid income amount and source descriptor.");
+      return;
+    }
+    try {
+      await addDoc(collection(db, "income_records"), {
+        source: incSource.trim(),
+        amount: Number(incAmount),
+        date: incDate,
+        uid: user.uid,
+        addedBy: user.displayName || "Unknown",
+        addedByPhoto: user.photoURL || "",
+        createdAt: new Date()
+      });
+      toast.success("Income entry logged securely! 💰");
+      setIncAmount("");
+      setIncSource("");
+    } catch {
+      toast.error("Failed to commit income registration.");
+    }
   };
 
-  const totalHouseholdIncome = Object.values(incomeMap).reduce((s, v) => s + v.amount, 0);
+  const removeIncomeRecord = async (id: string) => {
+    if (!window.confirm("Delete this historical income transaction?")) return;
+    try {
+      await deleteDoc(doc(db, "income_records", id));
+      toast.success("Income record retracted.");
+    } catch {
+      toast.error("Failed to drop record.");
+    }
+  };
 
   // ── Login ────────────────────────────────────────────────────────────────────
   const login = async () => {
@@ -426,7 +455,7 @@ export default function HomePage() {
     toast.success("Spreadsheet generated successfully! 📊");
   };
 
-  // ── Computed States Evaluated Against expenseDate ──
+  // ── Computed States Evaluated Against Filter Specifications ──
   const now = new Date();
 
   const thisMonthTx = transactions.filter((item: any) => {
@@ -446,7 +475,14 @@ export default function HomePage() {
   const totalSpend = thisMonthTx.reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
   const lastMonthTotal = lastMonthTx.reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
   const pctChange = lastMonthTotal ? (((totalSpend - lastMonthTotal) / lastMonthTotal) * 100).toFixed(1) : null;
-  const savings = totalHouseholdIncome - totalSpend;
+  
+  // Realized savings computed dynamically based on localized monthly dynamic inputs
+  const currentMonthIncomeCalculated = incomeRecords.filter((item: any) => {
+    if (!item.date) return false;
+    const [y, m] = item.date.split("-").map(Number);
+    return (m - 1) === now.getMonth() && y === now.getFullYear();
+  }).reduce((s, v) => s + Number(v.amount || 0), 0);
+  const savings = currentMonthIncomeCalculated - totalSpend;
 
   // Upgraded flexible partial-matching logic so user-logged actions also clear the queue
   const pendingBills = recurringBills.filter((blueprint: any) => {
@@ -476,6 +512,7 @@ export default function HomePage() {
     spendByPerson[item.uid].total += Number(item.amount || 0);
   });
 
+  // Base Data Filtration Structure Reacting directly to Controls Matrix
   const filteredTransactions = transactions.filter((item: any) => {
     if (!item.expenseDate) return false;
     const [y, m] = item.expenseDate.split("-").map(Number);
@@ -486,21 +523,58 @@ export default function HomePage() {
     return true;
   });
 
+  // Ledger filter pipeline utilizing Search Term string comparisons
+  const derivedSearchedTransactions = filteredTransactions.filter((tx) => {
+    if (!ledgerSearchTerm.trim()) return true;
+    const searchTarget = ledgerSearchTerm.toLowerCase();
+    return (
+      tx.title.toLowerCase().includes(searchTarget) ||
+      tx.category.toLowerCase().includes(searchTarget) ||
+      tx.paymentMethod?.toLowerCase().includes(searchTarget) ||
+      tx.addedBy?.toLowerCase().includes(searchTarget)
+    );
+  });
+
   const categoryMap: Record<string, number> = {};
   filteredTransactions.forEach((item: any) => { categoryMap[item.category] = (categoryMap[item.category] || 0) + Number(item.amount || 0); });
   const pieData = Object.entries(categoryMap).map(([name, value]) => ({ name, value })).sort((a: any, b: any) => b.value - a.value);
 
-  const monthlyComparison = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-    const m = d.getMonth(); const y = d.getFullYear();
-    const total = transactions
+  // Dynamic filter-driven aggregation of Card and Alternative Payment types
+  const paymentAnalyticsData = Object.entries(
+    filteredTransactions.reduce((acc: Record<string, number>, curr) => {
+      const method = curr.paymentMethod || "Unspecified";
+      acc[method] = (acc[method] || 0) + Number(curr.amount || 0);
+      return acc;
+    }, {})
+  ).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+
+  // Comprehensive Income vs Expense Historical Trends Structuring (6 Months rolling query window)
+  const incomeVsExpenseTrendsData = Array.from({ length: 6 }, (_, i) => {
+    const targetDate = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+    const m = targetDate.getMonth();
+    const y = targetDate.getFullYear();
+
+    const monthExpensesComputed = transactions
       .filter((item: any) => {
         if (!item.expenseDate) return false;
         const [itemY, itemM] = item.expenseDate.split("-").map(Number);
         return (itemM - 1) === m && itemY === y;
       })
       .reduce((s: number, item: any) => s + Number(item.amount || 0), 0);
-    return { month: MONTH_NAMES[m], total };
+
+    const monthIncomeComputed = incomeRecords
+      .filter((item: any) => {
+        if (!item.date) return false;
+        const [itemY, itemM] = item.date.split("-").map(Number);
+        return (itemM - 1) === m && itemY === y;
+      })
+      .reduce((s: number, item: any) => s + Number(item.amount || 0), 0);
+
+    return {
+      month: MONTH_NAMES[m],
+      Income: monthIncomeComputed,
+      Expenses: monthExpensesComputed
+    };
   });
 
   const biggestExpense = thisMonthTx.reduce((max: any, item: any) => Number(item.amount) > Number(max?.amount || 0) ? item : max, null as any);
@@ -642,65 +716,93 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* Shared Household Income Display */}
+          {/* Chronological Household Income Repository Workspace */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-zinc-400 text-sm font-medium">Household Income</p>
-              {totalHouseholdIncome > 0 && (
-                <span className={`text-sm font-semibold ${savings >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {savings >= 0 ? "✅" : "⚠️"} ₹{Math.abs(savings).toLocaleString()} {savings >= 0 ? "saved" : "over budget"}
-                </span>
-              )}
+              <div>
+                <p className="text-zinc-400 text-sm font-medium">Household Income Repository</p>
+                <p className="text-[10px] text-zinc-500">Add monthly salaries, dividends or resource funding</p>
+              </div>
+              <span className={`text-sm font-semibold ${savings >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {savings >= 0 ? "✅" : "⚠️"} ₹{Math.abs(savings).toLocaleString()} {savings >= 0 ? "saved" : "overspent"}
+              </span>
             </div>
 
-            <div className="space-y-3 mb-3">
-              {Object.entries(incomeMap).map(([uid, data]: [string, any]) => (
-                <div key={uid} className="flex items-center justify-between">
+            {/* Income Input Deployment Section */}
+            <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 mb-4 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <input 
+                  placeholder="Source (e.g. Salary, Dividend)" 
+                  value={incSource}
+                  onChange={(e) => setIncSource(e.target.value)}
+                  className="bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs text-white outline-none"
+                />
+                <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg px-2">
+                  <span className="text-zinc-500 text-xs mr-1">₹</span>
+                  <input 
+                    placeholder="Amount" 
+                    type="number"
+                    value={incAmount}
+                    onChange={(e) => setIncAmount(e.target.value)}
+                    className="bg-zinc-900 text-xs font-bold text-white outline-none w-full"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <input 
+                  type="date"
+                  value={incDate}
+                  onChange={(e) => setIncDate(e.target.value)}
+                  className="bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-[11px] text-zinc-400 outline-none flex-1"
+                />
+                <button 
+                  onClick={logIncomeHistory}
+                  className="bg-emerald-500 text-black font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-emerald-400 transition"
+                >
+                  Log Entry
+                </button>
+              </div>
+            </div>
+
+            {/* Chronological Income Listing Feed */}
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+              {incomeRecords.slice(0, 5).map((inc) => (
+                <div key={inc.id} className="flex items-center justify-between text-xs bg-zinc-950/60 p-2 rounded-xl border border-zinc-800/40">
                   <div className="flex items-center gap-2">
-                    {data.photo
-                      ? <img src={data.photo} className="w-7 h-7 rounded-full" alt="" />
-                      : <div className="w-7 h-7 rounded-full bg-cyan-700 flex items-center justify-center text-xs font-bold">{(data.name || "?")[0]}</div>
-                    }
-                    <span className="text-sm font-medium">{(data.name || "Unknown").split(" ")[0]}</span>
-                    {uid === user.uid && <span className="text-xs text-zinc-500">(you)</span>}
+                    {inc.addedByPhoto ? (
+                      <img src={inc.addedByPhoto} className="w-5 h-5 rounded-full" />
+                    ) : (
+                      <div className="w-5 h-5 rounded-full bg-emerald-800 flex items-center justify-center text-[10px] font-bold">I</div>
+                    )}
+                    <div>
+                      <span className="font-semibold text-zinc-200">{inc.source}</span>
+                      <p className="text-[9px] text-zinc-500">{inc.date} • by {inc.addedBy?.split(" ")[0]}</p>
+                    </div>
                   </div>
-                  <span className="text-sm font-bold text-emerald-400">₹{(data.amount || 0).toLocaleString()}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-emerald-400">₹{Number(inc.amount).toLocaleString()}</span>
+                    <button onClick={() => removeIncomeRecord(inc.id)} className="text-zinc-600 hover:text-red-400">✕</button>
+                  </div>
                 </div>
               ))}
-              {Object.keys(incomeMap).length === 0 && (
-                <p className="text-zinc-500 text-xs">No income set yet. Add yours below.</p>
+              {incomeRecords.length === 0 && (
+                <p className="text-zinc-500 text-center py-2 text-xs">No income history logged yet.</p>
               )}
             </div>
 
-            {totalHouseholdIncome > 0 && (
-              <div className="bg-zinc-800 rounded-xl p-2 mb-3 flex justify-between items-center">
-                <span className="text-xs text-zinc-400">Combined total</span>
-                <span className="text-sm font-bold text-white">₹{totalHouseholdIncome.toLocaleString()}</span>
-              </div>
-            )}
-
-            <div>
-              <p className="text-xs text-zinc-500 mb-1">Your monthly income</p>
-              <div className="flex items-center gap-2">
-                <span className="text-zinc-400">₹</span>
-                <input
-                  type="number"
-                  placeholder="Set your income"
-                  value={localIncome}
-                  onChange={(e) => setLocalIncome(e.target.value)}
-                  onBlur={() => saveIncome(Number(localIncome))}
-                  className="bg-zinc-800 p-2 rounded-xl outline-none flex-1 text-lg font-semibold text-white"
-                />
-              </div>
-            </div>
-
-            {totalHouseholdIncome > 0 && (
-              <div className="mt-3 h-2 bg-zinc-800 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all ${
-                  (totalSpend / totalHouseholdIncome) >= 1 ? "bg-red-500"
-                  : (totalSpend / totalHouseholdIncome) >= 0.8 ? "bg-yellow-400"
-                  : "bg-emerald-400"
-                }`} style={{ width: `${Math.min((totalSpend / totalHouseholdIncome) * 100, 100)}%` }} />
+            {currentMonthIncomeCalculated > 0 && (
+              <div className="mt-4 pt-2 border-t border-zinc-800/60">
+                <div className="flex justify-between text-xs text-zinc-400 mb-1">
+                  <span>Current Month Total Pool</span>
+                  <span className="font-bold text-white">₹{currentMonthIncomeCalculated.toLocaleString()}</span>
+                </div>
+                <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all ${
+                    (totalSpend / currentMonthIncomeCalculated) >= 1 ? "bg-red-500"
+                    : (totalSpend / currentMonthIncomeCalculated) >= 0.8 ? "bg-yellow-400"
+                    : "bg-emerald-400"
+                  }`} style={{ width: `${Math.min((totalSpend / currentMonthIncomeCalculated) * 100, 100)}%` }} />
+                </div>
               </div>
             )}
           </div>
@@ -711,7 +813,7 @@ export default function HomePage() {
               { label: "Monthly Spend", value: `₹${totalSpend.toLocaleString()}`, icon: Wallet,
                 sub: pctChange ? `${Number(pctChange) > 0 ? "+" : ""}${pctChange}% vs last month` : "This month",
                 subColor: pctChange && Number(pctChange) > 0 ? "text-red-400" : "text-emerald-400" },
-              { label: "Savings", value: `₹${Math.abs(savings).toLocaleString()}`, icon: PiggyBank,
+              { label: "Savings Portfolio", value: `₹${Math.abs(savings).toLocaleString()}`, icon: PiggyBank,
                 sub: savings >= 0 ? "On track ✅" : "Overspent ⚠️",
                 subColor: savings >= 0 ? "text-emerald-400" : "text-red-400" },
               { label: "Weekly Burn", value: `₹${weeklySpend.toLocaleString()}`, icon: TrendingUp,
@@ -762,22 +864,28 @@ export default function HomePage() {
               </div>
 
               {/* Fair Share Income-Proportional Monitor */}
-              {totalHouseholdIncome > 0 && totalSpend > 0 && (
+              {currentMonthIncomeCalculated > 0 && totalSpend > 0 && (
                 <div className="border-t border-zinc-800 pt-3">
                   <div className="flex items-center gap-1.5 mb-2">
                     <Scale className="w-4 h-4 text-purple-400" />
                     <p className="text-xs font-semibold text-purple-400 uppercase tracking-wider">Fair Share Balance</p>
                   </div>
                   <div className="space-y-2">
-                    {Object.entries(incomeMap).map(([uid, incData]: [string, any]) => {
-                      const incPct = (incData.amount / totalHouseholdIncome) * 100;
+                    {Array.from(new Set(incomeRecords.map(r => r.uid))).map((uid) => {
+                      const userIncomes = incomeRecords.filter(r => r.uid === uid && new Date(r.date).getMonth() === now.getMonth() && new Date(r.date).getFullYear() === now.getFullYear());
+                      const name = userIncomes[0]?.addedBy || "Unknown";
+                      const userIncomeTotal = userIncomes.reduce((s, c) => s + c.amount, 0);
+
+                      const incPct = (userIncomeTotal / currentMonthIncomeCalculated) * 100;
                       const spendPct = ((spendByPerson[uid]?.total || 0) / totalSpend) * 100;
                       const delta = spendPct - incPct;
+
+                      if (userIncomeTotal === 0) return null;
 
                       return (
                         <div key={uid} className="bg-zinc-950 p-2.5 rounded-xl flex items-center justify-between text-xs">
                           <div>
-                            <span className="font-medium text-zinc-300">{incData.name.split(" ")[0]}</span>
+                            <span className="font-medium text-zinc-300">{name.split(" ")[0]}</span>
                             <p className="text-zinc-500 text-[10px] mt-0.5">
                               Income Share: {incPct.toFixed(0)}% • Spend Share: {spendPct.toFixed(0)}%
                             </p>
@@ -820,8 +928,8 @@ export default function HomePage() {
                   <p className="text-zinc-400 text-xs">Daily avg</p>
                 </div>
                 <p className="text-lg font-bold">₹{dailyAvg.toLocaleString()}</p>
-                {totalHouseholdIncome > 0 && (
-                  <p className="text-zinc-500 text-xs mt-1">Safe: ₹{Math.round(totalHouseholdIncome / 30).toLocaleString()}/day</p>
+                {currentMonthIncomeCalculated > 0 && (
+                  <p className="text-zinc-500 text-xs mt-1">Safe: ₹{Math.round(currentMonthIncomeCalculated / 30).toLocaleString()}/day</p>
                 )}
               </div>
               {topCategory && (
@@ -837,18 +945,33 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Recent Ledger History */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-4">
-              <p className="font-semibold">Recent Transactions</p>
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+          {/* Recent Ledger History Dashboard */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-4">
+            <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+              <div>
+                <p className="font-semibold">Recent Transactions</p>
+                <p className="text-[10px] text-zinc-500">Live household accounts audit trail</p>
+              </div>
+              
+              {/* Dynamic Instant-Match Transaction Search Bar */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+                <input 
+                  type="text" 
+                  placeholder="Search description, card..."
+                  value={ledgerSearchTerm}
+                  onChange={(e) => setLedgerSearchTerm(e.target.value)}
+                  className="bg-zinc-950 text-xs text-white pl-8 pr-3 py-1.5 rounded-lg border border-zinc-800 outline-none w-full sm:w-48 focus:border-cyan-500 transition-colors"
+                />
+              </div>
             </div>
-            {transactions.length === 0 ? (
-              <p className="text-zinc-500 text-sm text-center py-6">No transactions yet. Add your first!</p>
+
+            {derivedSearchedTransactions.length === 0 ? (
+              <p className="text-zinc-500 text-sm text-center py-6">No matching transactions encountered.</p>
             ) : (
-              <div className="space-y-3">
-                {transactions.slice(0, 20).map((item, i) => (
-                  <div key={i} className="flex items-center gap-3">
+              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+                {derivedSearchedTransactions.slice(0, 30).map((item, i) => (
+                  <div key={i} className="flex items-center gap-3 border-b border-zinc-850 pb-2 last:border-0 last:pb-0 animate-fadeIn">
                     <div className="flex-shrink-0">
                       {item.addedByPhoto
                         ? <img src={item.addedByPhoto} className="w-8 h-8 rounded-full" alt="" />
@@ -863,7 +986,7 @@ export default function HomePage() {
                         </p>
                       </div>
                       <div className="flex items-center justify-between mt-0.5">
-                        <p className="text-zinc-500 text-xs">{item.category} - {item.paymentMethod}{item.expenseDate ? " - " + item.expenseDate : ""}</p>
+                        <p className="text-zinc-500 text-xs truncate max-w-[180px] sm:max-w-xs">{item.category} - {item.paymentMethod}{item.expenseDate ? " - " + item.expenseDate : ""}</p>
                         <p className="text-zinc-600 text-xs ml-2 flex-shrink-0">{item.addedBy?.split(" ")[0]}</p>
                       </div>
                     </div>
@@ -963,7 +1086,10 @@ export default function HomePage() {
       {activeTab === "analytics" && (
         <div className="px-4 py-6 space-y-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold">Analytics</h2>
+            <div>
+              <h2 className="text-2xl font-bold">Analytics</h2>
+              <p className="text-xs text-zinc-500">Filter parameters change all charts and data matrices</p>
+            </div>
             <button 
               onClick={exportToCSV}
               className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-850 active:scale-95 transition text-cyan-400 px-3 py-2 rounded-xl flex items-center gap-2 text-xs font-medium"
@@ -1036,7 +1162,66 @@ export default function HomePage() {
             </select>
           </div>
 
-          {/* Category Pie Chart */}
+          {/* INCOME VS EXPENSE HISTORICAL TRENDS CHART */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <div className="mb-2">
+              <p className="font-semibold text-zinc-200">Income vs Expense Trends</p>
+              <p className="text-[10px] text-zinc-500">6-Month cash-flow trend overview based on historical data inputs</p>
+            </div>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <ReBarChart data={incomeVsExpenseTrendsData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                  <XAxis dataKey="month" stroke="#a1a1aa" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis 
+                    stroke="#a1a1aa" 
+                    fontSize={11} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    tickFormatter={(val) => "₹" + (val / 1000) + "k"}
+                  />
+                  <Tooltip 
+                    cursor={{ fill: "#27272a", opacity: 0.4 }}
+                    formatter={(value: any) => `₹${Number(value).toLocaleString()}`}
+                    contentStyle={{ backgroundColor: "#18181b", border: "none", borderRadius: "8px", color: "#fff" }}
+                  />
+                  <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px' }} />
+                  <Bar dataKey="Income" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                </ReBarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Deep Analytics: Payment Methods & Specialized Cards Split */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <div className="mb-4">
+              <p className="font-semibold text-zinc-200">Payment Channel Utilization</p>
+              <p className="text-[10px] text-zinc-500">Spend breakdown reacting natively to the active filter configuration matrix</p>
+            </div>
+            {paymentAnalyticsData.length > 0 ? (
+              <div className="space-y-3">
+                {paymentAnalyticsData.map((channel, i) => (
+                  <div key={i} className="bg-zinc-950 p-3 rounded-xl border border-zinc-850 flex flex-col space-y-1">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-zinc-300 truncate max-w-[200px]">{channel.name}</span>
+                      <span className="font-black text-cyan-400">₹{channel.value.toLocaleString()}</span>
+                    </div>
+                    <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full" 
+                        style={{ width: `${(channel.value / filteredTransactions.reduce((acc, c) => acc + c.amount, 0)) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-zinc-500 text-sm text-center py-6">No localized data mapped to current search filter combinations.</p>
+            )}
+          </div>
+
+          {/* Category Spend Distribution Matrix */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
             <p className="font-semibold mb-4 text-zinc-200">Spend by Category</p>
             {pieData.length > 0 ? (
@@ -1085,31 +1270,6 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* Monthly Comparison Bar Chart */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-            <p className="font-semibold mb-4 text-zinc-200">Last 6 Months</p>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <ReBarChart data={monthlyComparison}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                  <XAxis dataKey="month" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis
-                    stroke="#a1a1aa"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(val) => "₹" + (val / 1000) + "k"}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "#27272a" }}
-                    formatter={(value: any) => `₹${Number(value).toLocaleString()}` as any}
-                    contentStyle={{ backgroundColor: "#18181b", border: "none", borderRadius: "8px", color: "#fff" }}
-                  />
-                  <Bar dataKey="total" fill="#06b6d4" radius={[4, 4, 0, 0]} />
-                </ReBarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
         </div>
       )}
 
